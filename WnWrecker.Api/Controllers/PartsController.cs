@@ -3,6 +3,8 @@ using Microsoft.EntityFrameworkCore;
 using WnWrecker.Api.Data;
 using WnWrecker.Api.Models;
 using Microsoft.AspNetCore.Authorization;
+using Azure.Storage.Blobs;
+using Azure.Storage.Blobs.Models;
 
 namespace WnWrecker.Api.Controllers
 {
@@ -11,11 +13,13 @@ namespace WnWrecker.Api.Controllers
     public class PartsController : ControllerBase
     {
         private readonly AppDbContext _db;
+        private readonly IConfiguration _config;    
 
         // the DbContext is handed to us automatically (dependency injection)
-        public PartsController(AppDbContext db)
+        public PartsController(AppDbContext db, IConfiguration config)
         {
             _db = db;
+            _config = config;
         }
 
         // GET /api/parts?search=&make=&year=   -> list (with optional search/filter)
@@ -83,9 +87,57 @@ namespace WnWrecker.Api.Controllers
             var part = await _db.Parts.FindAsync(id);
             if (part == null) return NotFound();
 
+            // remove the image from Azure too, if it has one
+            if (!string.IsNullOrEmpty(part.PhotoUrl))
+            {
+                var containerClient = new BlobContainerClient(
+                    _config["AzureBlob:ConnectionString"],
+                    _config["AzureBlob:Container"]);
+                var blobName = Path.GetFileName(new Uri(part.PhotoUrl).LocalPath);
+                await containerClient.DeleteBlobIfExistsAsync(blobName);
+            }
+
             _db.Parts.Remove(part);
             await _db.SaveChangesAsync();
             return NoContent();
+        }
+
+        [Authorize]
+        [HttpPost("{id}/photo")]
+        public async Task<IActionResult> UploadPhoto(int id, IFormFile file)
+        {
+            var part = await _db.Parts.FindAsync(id);
+            if (part == null) return NotFound();
+            if (file == null || file.Length == 0) return BadRequest("No file uploaded.");
+
+            //image allowed only
+            var allowed = new[] { ".jpg", ".jpeg", ".png", ".webp", ".gif" };
+            var ext = Path.GetExtension(file.FileName).ToLowerInvariant();
+            if (!allowed.Contains(ext))
+                return BadRequest("Only image files (jpg, jpeg, png, webp, gif) are allowed.");
+
+            //image size upto 20mb
+            const long maxBytes = 20 * 1024 * 1024; // 20 MB
+            if (file.Length > maxBytes)
+                return BadRequest("Image must be 20 MB or smaller.");
+
+            var containerClient = new BlobContainerClient(
+                _config["AzureBlob:ConnectionString"],
+                _config["AzureBlob:Container"]);
+
+            var blobName = $"{Guid.NewGuid()}{Path.GetExtension(file.FileName)}";
+            var blobClient = containerClient.GetBlobClient(blobName);
+
+            using (var stream = file.OpenReadStream())
+            {
+                await blobClient.UploadAsync(stream,
+                    new BlobHttpHeaders { ContentType = file.ContentType });
+            }
+
+            part.PhotoUrl = blobClient.Uri.ToString();
+            await _db.SaveChangesAsync();
+
+            return Ok(new { url = part.PhotoUrl });
         }
     }
 }
