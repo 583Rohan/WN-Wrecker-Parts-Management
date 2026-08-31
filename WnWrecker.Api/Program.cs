@@ -47,10 +47,20 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
 builder.Services.AddAuthorization();
 
 
-
+// Enable CORS on backend (now browser is allowed to call on APIs)
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("Frontend", policy =>
+        policy.WithOrigins("http://localhost:5173")   // the Vite dev server
+              .AllowAnyHeader()
+              .AllowAnyMethod());
+});
 
 
 var app = builder.Build();
+
+// Enable Cors for Frontend
+app.UseCors("Frontend");
 
 
 // For authorization and Authentication (order of code matters)
