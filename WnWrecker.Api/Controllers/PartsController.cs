@@ -13,7 +13,7 @@ namespace WnWrecker.Api.Controllers
     public class PartsController : ControllerBase
     {
         private readonly AppDbContext _db;
-        private readonly IConfiguration _config;    
+        private readonly IConfiguration _config;
 
         // the DbContext is handed to us automatically (dependency injection)
         public PartsController(AppDbContext db, IConfiguration config)
@@ -23,8 +23,9 @@ namespace WnWrecker.Api.Controllers
         }
 
         // GET /api/parts?search=&make=&year=   -> list (with optional search/filter)
+        [EndpointSummary("List / search parts")]
         [HttpGet]
-        public async Task<ActionResult<IEnumerable<Part>>> GetParts(string? search, string? make, int? year)
+        public async Task<ActionResult<IEnumerable<Part>>> GetParts(string? search, string? make, string? model, int? year)
         {
             var query = _db.Parts.AsQueryable();
 
@@ -32,6 +33,8 @@ namespace WnWrecker.Api.Controllers
                 query = query.Where(p => p.Name.Contains(search));
             if (!string.IsNullOrWhiteSpace(make))
                 query = query.Where(p => p.Make == make);
+            if (!string.IsNullOrWhiteSpace(model))
+                query = query.Where(p => p.Model == model);
             if (year.HasValue)
                 query = query.Where(p => p.Year == year);
 
@@ -39,6 +42,7 @@ namespace WnWrecker.Api.Controllers
         }
 
         // GET /api/parts/5   -> one part
+        [EndpointSummary("Get a part by ID")]
         [HttpGet("{id}")]
         public async Task<ActionResult<Part>> GetPart(int id)
         {
@@ -48,6 +52,7 @@ namespace WnWrecker.Api.Controllers
         }
 
         // POST /api/parts    -> create
+        [EndpointSummary("Create a part")]
         [Authorize]
         [HttpPost]
         public async Task<ActionResult<Part>> CreatePart(Part part)
@@ -58,6 +63,7 @@ namespace WnWrecker.Api.Controllers
         }
 
         // PUT /api/parts/5   -> update
+        [EndpointSummary("Update a part")]
         [Authorize]
         [HttpPut("{id}")]
         public async Task<IActionResult> UpdatePart(int id, Part updated)
@@ -80,6 +86,7 @@ namespace WnWrecker.Api.Controllers
         }
 
         // DELETE /api/parts/5   -> delete
+        [EndpointSummary("Delete a part")]
         [Authorize]
         [HttpDelete("{id}")]
         public async Task<IActionResult> DeletePart(int id)
@@ -102,6 +109,7 @@ namespace WnWrecker.Api.Controllers
             return NoContent();
         }
 
+        [EndpointSummary("Upload a part photo")]
         [Authorize]
         [HttpPost("{id}/photo")]
         public async Task<IActionResult> UploadPhoto(int id, IFormFile file)
