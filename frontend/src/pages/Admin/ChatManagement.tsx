@@ -16,31 +16,22 @@ type ChatDetail = {
   createdAt: string; messages: Msg[]; parts: PartRef[];
 };
 
-export default function AdminDashboard() {
-  const [token, setToken] = useState<string | null>(() => localStorage.getItem(ADMIN_TOKEN_KEY));
-
-  const [username, setUsername] = useState('');
-  const [password, setPassword] = useState('');
-  const [error, setError] = useState<string | null>(null);
-
+export default function ChatManagement() {
   const [chats, setChats] = useState<ChatSummary[]>([]);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [detail, setDetail] = useState<ChatDetail | null>(null);
   const [reply, setReply] = useState('');
 
-  // fetch helper that adds the Bearer token and logs out on 401
   const authFetch = useCallback((url: string, options: RequestInit = {}) => {
     const headers = new Headers(options.headers);
-    headers.set('Authorization', `Bearer ${token}`);
+    headers.set('Authorization', `Bearer ${localStorage.getItem(ADMIN_TOKEN_KEY)}`);
     return fetch(url, { ...options, headers }).then(res => {
-      if (res.status === 401) { localStorage.removeItem(ADMIN_TOKEN_KEY); setToken(null); }
+      if (res.status === 401) { localStorage.removeItem(ADMIN_TOKEN_KEY); window.location.reload(); }
       return res;
     });
-  }, [token]);
+  }, []);
 
-  // load + poll the conversation list
   useEffect(() => {
-    if (!token) return;
     const load = async () => {
       const res = await authFetch(`${API}/api/admin/chats`);
       if (res.ok) setChats(await res.json());
@@ -48,11 +39,10 @@ export default function AdminDashboard() {
     load();
     const id = setInterval(load, 5000);
     return () => clearInterval(id);
-  }, [token, authFetch]);
+  }, [authFetch]);
 
-  // load + poll the selected conversation
   useEffect(() => {
-    if (!token || selectedId == null) { setDetail(null); return; }
+    if (selectedId == null) { setDetail(null); return; }
     const load = async () => {
       const res = await authFetch(`${API}/api/admin/chats/${selectedId}`);
       if (res.ok) setDetail(await res.json());
@@ -60,38 +50,14 @@ export default function AdminDashboard() {
     load();
     const id = setInterval(load, 4000);
     return () => clearInterval(id);
-  }, [token, selectedId, authFetch]);
-
-  const login = async () => {
-    setError(null);
-    try {
-      const res = await fetch(`${API}/api/auth/login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, password }),
-      });
-      if (!res.ok) { setError('Invalid username or password.'); return; }
-      const data = await res.json();
-      localStorage.setItem(ADMIN_TOKEN_KEY, data.token);
-      setToken(data.token);
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : String(err));
-    }
-  };
-
-  const logout = () => {
-    localStorage.removeItem(ADMIN_TOKEN_KEY);
-    setToken(null);
-    setSelectedId(null);
-  };
+  }, [selectedId, authFetch]);
 
   const sendReply = async () => {
     const text = reply.trim();
     if (!text || selectedId == null) return;
     setReply('');
     await authFetch(`${API}/api/admin/chats/${selectedId}/messages`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ text }),
     });
     const res = await authFetch(`${API}/api/admin/chats/${selectedId}`);
@@ -101,39 +67,17 @@ export default function AdminDashboard() {
   const changeStatus = async (partId: number, status: string) => {
     if (selectedId == null) return;
     await authFetch(`${API}/api/admin/chats/${selectedId}/parts/${partId}/status`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
+      method: 'PUT', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ status }),
     });
     const res = await authFetch(`${API}/api/admin/chats/${selectedId}`);
     if (res.ok) setDetail(await res.json());
   };
 
-  if (!token) {
-    return (
-      <div style={{ padding: 40, fontFamily: 'sans-serif', maxWidth: 320 }}>
-        <h1>Admin Login</h1>
-        {error && <p style={{ color: 'red' }}>{error}</p>}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-          <input value={username} onChange={e => setUsername(e.target.value)}
-                 placeholder="Username" style={{ padding: 8 }} />
-          <input type="password" value={password} onChange={e => setPassword(e.target.value)}
-                 onKeyDown={e => { if (e.key === 'Enter') login(); }}
-                 placeholder="Password" style={{ padding: 8 }} />
-          <button onClick={login} style={{ padding: 8 }}>Log in</button>
-        </div>
-      </div>
-    );
-  }
-
   return (
-    <div style={{ height: '100vh', display: 'flex', flexDirection: 'column' }}>
-      <div style={headerBar}>
-        <h2 style={{ margin: 0 }}>WN Wrecker — Chat Admin</h2>
-        <button onClick={logout} style={{ padding: 8 }}>Log out</button>
-      </div>
-
-      <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
+    <div>
+      <h1 style={{ marginTop: 0 }}>Chat Management</h1>
+      <div style={{ display: 'flex', height: '72vh', border: '1px solid #ddd', borderRadius: 8, overflow: 'hidden' }}>
         <div style={listPane}>
           {chats.length === 0 && <p style={{ padding: 12, color: '#888' }}>No conversations yet.</p>}
           {chats.map(c => (
@@ -148,7 +92,6 @@ export default function AdminDashboard() {
             </div>
           ))}
         </div>
-
         <div style={detailPane}>
           {!detail && <p style={{ color: '#888' }}>Select a conversation on the left.</p>}
           {detail && (
@@ -157,7 +100,6 @@ export default function AdminDashboard() {
                 <strong>{detail.customerName || `Customer #${detail.id}`}</strong>
                 {detail.customerContact && <span style={{ color: '#666' }}> — {detail.customerContact}</span>}
               </div>
-
               {detail.parts.length > 0 && (
                 <div style={{ marginBottom: 12 }}>
                   {detail.parts.map(p => (
@@ -170,7 +112,6 @@ export default function AdminDashboard() {
                   ))}
                 </div>
               )}
-
               <div style={msgArea}>
                 {detail.messages.map((m, i) => (
                   <div key={i} style={{ textAlign: m.sender === 'admin' ? 'right' : 'left', marginBottom: 6 }}>
@@ -178,7 +119,6 @@ export default function AdminDashboard() {
                   </div>
                 ))}
               </div>
-
               <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
                 <input value={reply} onChange={e => setReply(e.target.value)}
                        onKeyDown={e => { if (e.key === 'Enter') sendReply(); }}
@@ -193,10 +133,6 @@ export default function AdminDashboard() {
   );
 }
 
-const headerBar: CSSProperties = {
-  display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-  padding: '10px 16px', borderBottom: '1px solid #ddd', background: '#f8f8f8',
-};
 const listPane: CSSProperties = { width: 280, borderRight: '1px solid #ddd', overflowY: 'auto' };
 const detailPane: CSSProperties = { flex: 1, padding: 16, display: 'flex', flexDirection: 'column', overflow: 'hidden' };
 const msgArea: CSSProperties = { flex: 1, overflowY: 'auto', border: '1px solid #eee', borderRadius: 8, padding: 12 };
