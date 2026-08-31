@@ -12,5 +12,6 @@
         // a conversation HAS MANY messages and HAS MANY product-links
         public List<Message> Messages { get; set; } = new();
         public List<ConversationPart> Parts { get; set; } = new();
+        public bool HandedOff { get; set; } = false;       // Chat handed over to human
     }
 }

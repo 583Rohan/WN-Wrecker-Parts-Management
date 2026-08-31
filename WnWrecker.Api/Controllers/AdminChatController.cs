@@ -36,6 +36,7 @@ namespace WnWrecker.Api.Controllers
                 c.Id,
                 c.CustomerName,
                 c.CustomerContact,
+                c.HandedOff,                            // true once a human has taken over
                 c.CreatedAt,
                 c.LastMessageAt,
                 messageCount = c.Messages.Count,
@@ -98,7 +99,7 @@ namespace WnWrecker.Api.Controllers
             });
         }
 
-        // POST /api/admin/chats/5/messages  -> admin replies
+        // POST /api/admin/chats/5/messages  -> admin replies (a human joining stops the bot)
         [EndpointSummary("Reply to a conversation")]
         [HttpPost("{conversationId}/messages")]
         public async Task<IActionResult> Reply(int conversationId, ReplyRequest req)
@@ -108,6 +109,7 @@ namespace WnWrecker.Api.Controllers
             if (string.IsNullOrWhiteSpace(req.Text)) return BadRequest("Reply text is required.");
 
             _db.Messages.Add(new Message { ConversationId = c.Id, Sender = "admin", Text = req.Text });
+            c.HandedOff = true;                        // a human has joined -> bot stops
             c.LastMessageAt = DateTime.UtcNow;
             await _db.SaveChangesAsync();
             return Ok();

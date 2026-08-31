@@ -4,8 +4,8 @@ SCI701 Project
 
 Web application for WN Wrecker, a car wrecker that lists and sells second-hand
 car parts online. It provides a public catalogue of parts (with search, a car
-finder, and photos), a customer–admin chat, and a protected admin interface to
-manage listings and enquiries.
+finder, and photos), a customer–admin chat with an automated FAQ bot, and a
+protected admin interface to manage listings and enquiries.
 
 ## Repository structure
 This repo contains both halves of the project:
@@ -32,8 +32,13 @@ This repo contains both halves of the project:
 - Customer chat: anonymous customers (no login) chat via a floating widget,
   identified by a conversation token stored in their browser. A chat can be about
   no product, one product, or several.
-- Admin chat dashboard: view all conversations (also grouped by product), reply,
-  and set a per-product enquiry status (New → In Discussion → Reserved →
+- Automated FAQ bot: answers common questions instantly and offers suggested
+  questions. It hands the conversation to a human when the customer asks about
+  availability/price, requests a human, or the query needs a person. Once a human
+  is involved (customer requests one, or an admin replies), the bot goes silent
+  for that conversation.
+- Admin chat dashboard: view all conversations (Recent, or grouped by product),
+  reply, and set a per-product enquiry status (New → In Discussion → Reserved →
   Awaiting Pickup → Sold → Closed) so parts are not double-sold.
 
 ## Frontend routes
@@ -67,9 +72,11 @@ This repo contains both halves of the project:
 ### Chat — customer (public, identified by conversation token)
 | Method | Route                                    | Purpose                       |
 |--------|------------------------------------------|-------------------------------|
+| GET    | /api/chat/faqs                           | Suggested FAQ questions       |
 | POST   | /api/chat/start                          | Start a conversation, get token |
 | GET    | /api/chat/{token}                        | Load conversation + messages + parts |
-| POST   | /api/chat/{token}/messages               | Send a message                |
+| POST   | /api/chat/{token}/messages               | Send a message (FAQ bot auto-replies) |
+| POST   | /api/chat/{token}/human                  | Request a human (hand off, silence bot) |
 | POST   | /api/chat/{token}/parts                  | Attach a product              |
 | DELETE | /api/chat/{token}/parts/{partId}         | Remove a product              |
 
@@ -79,7 +86,7 @@ This repo contains both halves of the project:
 | GET    | /api/admin/chats                                          | List all conversations      |
 | GET    | /api/admin/chats/by-part                                  | Conversations grouped by product |
 | GET    | /api/admin/chats/{conversationId}                         | One conversation + messages |
-| POST   | /api/admin/chats/{conversationId}/messages               | Admin reply                 |
+| POST   | /api/admin/chats/{conversationId}/messages               | Admin reply (also hands off) |
 | PUT    | /api/admin/chats/{conversationId}/parts/{partId}/status  | Change a product's status   |
 
 Admin endpoints require an `Authorization: Bearer <token>` header. Get a token
@@ -88,8 +95,9 @@ from `POST /api/auth/login` using the admin credentials.
 ## Data model
 - **Part** — a listed part (name, make, model, year, condition, price, status, photo URL).
 - **Conversation** — one per customer chat; identified by a `Token` (GUID) the
-  browser stores. No customer login required.
-- **Message** — a single message in a conversation (`Sender` = customer or admin).
+  browser stores. No customer login required. `HandedOff` (bool) becomes true once
+  a human takes over, after which the bot stays silent for that conversation.
+- **Message** — a single message in a conversation; `Sender` is `customer`, `admin`, or `bot`.
 - **ConversationPart** — links a conversation to a part and holds the per-product
   enquiry `Status`. A chat about several parts has several of these; a general
   enquiry has none.
@@ -125,7 +133,7 @@ Prerequisites: .NET 10 SDK, SQL Server LocalDB, Visual Studio 2022.
    dotnet user-secrets set "AzureBlob:ConnectionString" "<the storage connection string>"
    dotnet user-secrets set "AzureBlob:Container" "part-photos"
 3. Create the local database — in Package Manager Console, run:
-   Update-database
+   Update-Database
 4. Run the project (F5). The API starts on https://localhost:7014, with the
    interactive API tester at https://localhost:7014/scalar.
 
@@ -143,4 +151,4 @@ Prerequisites: Node.js (LTS).
 3. Open the printed URL (default http://localhost:5173).
 
 The backend must be running for the frontend to load data, and its URL must be
-allowed by CORS (configured in the backend's Program.cs).   
+allowed by CORS (configured in the backend's Program.cs).

@@ -39,6 +39,9 @@ namespace WnWrecker.Api.Migrations
                     b.Property<string>("CustomerName")
                         .HasColumnType("nvarchar(max)");
 
+                    b.Property<bool>("HandedOff")
+                        .HasColumnType("bit");
+
                     b.Property<DateTime>("LastMessageAt")
                         .HasColumnType("datetime2");
 
