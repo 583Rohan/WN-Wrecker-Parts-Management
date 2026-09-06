@@ -1,30 +1,37 @@
-import { type CSSProperties } from 'react';
-import { Link, Outlet } from 'react-router-dom';
+import { Link, NavLink, Outlet } from 'react-router-dom';
 import ChatWidget from './ChatWidget';
+import { useCart } from '../lib/cart';
+
+const linkStyle = ({ isActive }: { isActive: boolean }) => ({
+  color: isActive ? 'var(--accent)' : undefined,
+  fontWeight: isActive ? 700 : 400,
+});
 
 export default function CustomerLayout() {
+  const { count } = useCart();
   return (
-    <div>
-      <nav style={navStyle}>
-        <Link to="/" style={{ ...linkStyle, fontWeight: 700 }}>WN Wrecker</Link>
-        <div style={{ display: 'flex', gap: 16 }}>
-          <Link to="/parts" style={linkStyle}>Shop</Link>
-          <Link to="/finder" style={linkStyle}>Car Finder</Link>
-          <Link to="/about" style={linkStyle}>About</Link>
-          <Link to="/contact" style={linkStyle}>Contact</Link>
-          <Link to="/cart" style={linkStyle}>Cart</Link>
+    <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
+      <header className="nav">
+        <div className="container nav-inner">
+          <Link to="/" className="brand">WN<span>Wrecker</span></Link>
+          <nav className="nav-links">
+            <NavLink to="/" end style={linkStyle}>Home</NavLink>
+            <NavLink to="/parts" style={linkStyle}>Shop</NavLink>
+            <NavLink to="/finder" style={linkStyle}>Car Finder</NavLink>
+            <NavLink to="/about" style={linkStyle}>About</NavLink>
+            <NavLink to="/contact" style={linkStyle}>Contact</NavLink>
+            <Link to="/cart" className="btn btn-sm">Cart ({count})</Link>
+          </nav>
         </div>
-      </nav>
-      <main style={{ padding: 20, fontFamily: 'sans-serif' }}>
-        <Outlet />
-      </main>
+      </header>
+      <main style={{ flex: 1 }}><Outlet /></main>
+      <footer className="footer">
+        <div className="container">
+          <strong style={{ color: '#fff' }}>WN Wrecker</strong> — quality second-hand car parts.<br />
+          Mon–Fri 8am–5pm · Sat 9am–1pm · [phone] · [email]
+        </div>
+      </footer>
       <ChatWidget />
     </div>
   );
 }
-
-const navStyle: CSSProperties = {
-  display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-  padding: '12px 20px', background: '#111', color: 'white', fontFamily: 'sans-serif',
-};
-const linkStyle: CSSProperties = { color: 'white', textDecoration: 'none' };
