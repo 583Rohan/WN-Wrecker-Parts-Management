@@ -1,6 +1,7 @@
 import { Link, NavLink, Outlet } from 'react-router-dom';
 import ChatWidget from './ChatWidget';
 import { useCart } from '../lib/cart';
+import SiteFooter from "./SiteFooter";
 
 const linkStyle = ({ isActive }: { isActive: boolean }) => ({
   color: isActive ? 'var(--accent)' : undefined,
@@ -25,12 +26,7 @@ export default function CustomerLayout() {
         </div>
       </header>
       <main style={{ flex: 1 }}><Outlet /></main>
-      <footer className="footer">
-        <div className="container">
-          <strong style={{ color: '#fff' }}>WN Wrecker</strong> — quality second-hand car parts.<br />
-          Mon–Fri 8am–5pm · Sat 9am–1pm · [phone] · [email]
-        </div>
-      </footer>
+     <SiteFooter />
       <ChatWidget />
     </div>
   );
