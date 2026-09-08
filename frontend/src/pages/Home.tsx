@@ -573,7 +573,15 @@ export default function Home() {
   const navigate = useNavigate();
 
   useEffect(() => {
-    fetch(`${API}/api/parts`).then(r => (r.ok ? r.json() : [])).then(setParts).catch(() => {});
+    fetch(`${API}/api/parts`)
+      .then(response => (response.ok ? response.json() : []))
+      .then((data: Part[]) => {
+        const availableParts = data.filter(
+          part => part.status?.trim().toLowerCase() !== 'sold'
+        );
+        setParts(availableParts);
+      })
+      .catch(() => setParts([]));
   }, []);
 
   useEffect(() => () => {
@@ -584,7 +592,7 @@ export default function Home() {
     setSelectedMake(make);
     if (makeNavigationTimer.current !== null) window.clearTimeout(makeNavigationTimer.current);
     makeNavigationTimer.current = window.setTimeout(() => {
-      navigate(`/parts?make=${encodeURIComponent(make)}`);
+      navigate("/finder");
     }, 280);
   }
 
