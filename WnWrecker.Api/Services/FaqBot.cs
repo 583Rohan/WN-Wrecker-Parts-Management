@@ -36,6 +36,9 @@ public static class FaqBot
         new FaqEntry("Do parts come with a warranty?",
             new[] { "warranty", "guarantee", "return", "refund" },
             "Most parts come with a limited warranty. Terms vary by part, so ask us about the specific item."),
+        new FaqEntry("Call or email us directly",
+            new[] { "call", "phone", "email", "contact", "number", "speak", "talk to someone" },
+            "You can reach our team directly on [phone] or at [email]. We're happy to help!"),
     };
 
     public static string[] SuggestedQuestions => Faqs.Select(f => f.Question).ToArray();

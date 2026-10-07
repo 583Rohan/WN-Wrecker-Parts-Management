@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState, type CSSProperties } from 'react';
+import { useNavigate } from 'react-router-dom';
 
 const API = import.meta.env.VITE_API_URL;
 const ADMIN_TOKEN_KEY = 'wnwrecker_admin_token';
@@ -13,12 +14,13 @@ type ChatSummary = {
 type Msg = { sender: string; text: string; sentAt: string };
 type ChatDetail = {
   id: number; customerName: string | null; customerContact: string | null;
-  createdAt: string; messages: Msg[]; parts: PartRef[];
+  createdAt: string; archived?: boolean; messages: Msg[]; parts: PartRef[];
 };
 type Enquiry = { conversationId: number; customer: string | null; status: string; updatedAt: string };
 type PartGroup = { partId: number; partName: string; partStatus: string; enquiryCount: number; enquiries: Enquiry[] };
 
 export default function ChatManagement() {
+  const navigate = useNavigate();
   const [view, setView] = useState<'recent' | 'byPart'>('recent');
   const [collapsed, setCollapsed] = useState<Set<number>>(new Set());
   const [chats, setChats] = useState<ChatSummary[]>([]);
@@ -102,6 +104,13 @@ export default function ChatManagement() {
     if (res.ok) setDetail(await res.json());
   };
 
+  const toggleArchive = async (currentlyArchived: boolean) => {
+    if (selectedId == null) return;
+    await authFetch(`${API}/api/admin/chats/${selectedId}/${currentlyArchived ? 'unarchive' : 'archive'}`, { method: 'POST' });
+    const res = await authFetch(`${API}/api/admin/chats/${selectedId}`);
+    if (res.ok) setDetail(await res.json());
+  };
+
   return (
     <div>
       <h1 style={{ marginTop: 0 }}>Chat Management</h1>
@@ -159,6 +168,10 @@ export default function ChatManagement() {
               <div style={{ marginBottom: 8 }}>
                 <strong>{detail.customerName || `Customer #${detail.id}`}</strong>
                 {detail.customerContact && <span style={{ color: '#666' }}> — {detail.customerContact}</span>}
+              </div>
+              <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+                <button onClick={() => navigate(`/admin/invoices?conversationId=${detail.id}`)} style={{ padding: '6px 12px', cursor: 'pointer' }}>Create invoice</button>
+                <button onClick={() => toggleArchive(!!detail.archived)} style={{ padding: '6px 12px', cursor: 'pointer' }}>{detail.archived ? 'Unarchive' : 'Archive'}</button>
               </div>
               {detail.parts.length > 0 && (
                 <div style={{ marginBottom: 12 }}>

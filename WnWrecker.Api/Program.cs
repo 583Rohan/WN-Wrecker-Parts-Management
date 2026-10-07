@@ -13,6 +13,8 @@ using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
 
+QuestPDF.Settings.License = QuestPDF.Infrastructure.LicenseType.Community; // for invoice generator
+
 // Add services to the container.
 
 builder.Services.AddControllers();

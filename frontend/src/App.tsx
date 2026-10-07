@@ -12,6 +12,7 @@ import NotFound from './pages/NotFound';
 import AdminHome from './pages/Admin/AdminHome';
 import ManageParts from './pages/Admin/ManageParts';
 import ChatManagement from './pages/Admin/ChatManagement';
+import Invoices from './pages/Admin/Invoices';
 
 function App() {
   return (
@@ -32,6 +33,7 @@ function App() {
         <Route index element={<AdminHome />} />
         <Route path="parts" element={<ManageParts />} />
         <Route path="chats" element={<ChatManagement />} />
+        <Route path="invoices" element={<Invoices />} />
       </Route>
 
       <Route path="*" element={<NotFound />} />

@@ -37,6 +37,7 @@ namespace WnWrecker.Api.Controllers
                 c.CustomerName,
                 c.CustomerContact,
                 c.HandedOff,                            // true once a human has taken over
+                c.Archived,                             // true once admin has closed/archived it
                 c.CreatedAt,
                 c.LastMessageAt,
                 messageCount = c.Messages.Count,
@@ -93,6 +94,7 @@ namespace WnWrecker.Api.Controllers
                 c.CustomerName,
                 c.CustomerContact,
                 c.CreatedAt,
+                c.Archived,
                 messages = c.Messages.OrderBy(m => m.SentAt)
                                      .Select(m => new { m.Sender, m.Text, m.SentAt }),
                 parts = c.Parts.Select(cp => new { cp.PartId, name = cp.Part!.Name, cp.Status })
@@ -111,6 +113,30 @@ namespace WnWrecker.Api.Controllers
             _db.Messages.Add(new Message { ConversationId = c.Id, Sender = "admin", Text = req.Text });
             c.HandedOff = true;                        // a human has joined -> bot stops
             c.LastMessageAt = DateTime.UtcNow;
+            await _db.SaveChangesAsync();
+            return Ok();
+        }
+
+        // POST /api/admin/chats/5/archive  -> close/archive a conversation
+        [EndpointSummary("Archive a conversation")]
+        [HttpPost("{conversationId}/archive")]
+        public async Task<IActionResult> Archive(int conversationId)
+        {
+            var c = await _db.Conversations.FindAsync(conversationId);
+            if (c == null) return NotFound();
+            c.Archived = true;
+            await _db.SaveChangesAsync();
+            return Ok();
+        }
+
+        // POST /api/admin/chats/5/unarchive  -> reopen an archived conversation
+        [EndpointSummary("Unarchive a conversation")]
+        [HttpPost("{conversationId}/unarchive")]
+        public async Task<IActionResult> Unarchive(int conversationId)
+        {
+            var c = await _db.Conversations.FindAsync(conversationId);
+            if (c == null) return NotFound();
+            c.Archived = false;
             await _db.SaveChangesAsync();
             return Ok();
         }

@@ -42,8 +42,10 @@ export default function AdminLayout() {
         <div className="container nav-inner">
           <Link to="/admin" className="brand">WN<span>Wrecker</span> Admin</Link>
           <nav className="nav-links">
+            <Link to="/admin">Dashboard</Link>
             <Link to="/admin/parts">Manage Parts</Link>
             <Link to="/admin/chats">Chats</Link>
+            <Link to="/admin/invoices">Invoices</Link>
             <button className="btn btn-sm" onClick={logout}>Log out</button>
           </nav>
         </div>

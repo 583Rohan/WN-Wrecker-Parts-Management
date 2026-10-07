@@ -13,5 +13,6 @@
         public List<Message> Messages { get; set; } = new();
         public List<ConversationPart> Parts { get; set; } = new();
         public bool HandedOff { get; set; } = false;       // Chat handed over to human
+        public bool Archived { get; set; } = false;        // closed/archived by admin
     }
 }
