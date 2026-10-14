@@ -50,6 +50,7 @@ builder.Services.AddAuthorization();
 
 // deletes old chats automatically (closed after 7 days, inactive after 60 — see "ChatCleanup" in appsettings.json)
 builder.Services.AddHostedService<WnWrecker.Api.Services.ChatCleanupService>();
+builder.Services.AddSingleton<WnWrecker.Api.Services.PhotoStorage>();   // part photos on Cloudinary
 
 
 // Enable CORS on backend (now browser is allowed to call on APIs)

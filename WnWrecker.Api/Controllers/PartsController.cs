@@ -3,8 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using WnWrecker.Api.Data;
 using WnWrecker.Api.Models;
 using Microsoft.AspNetCore.Authorization;
-using Azure.Storage.Blobs;
-using Azure.Storage.Blobs.Models;
+using WnWrecker.Api.Services;
 
 namespace WnWrecker.Api.Controllers
 {
@@ -13,13 +12,13 @@ namespace WnWrecker.Api.Controllers
     public class PartsController : ControllerBase
     {
         private readonly AppDbContext _db;
-        private readonly IConfiguration _config;
+        private readonly PhotoStorage _photos;
 
-        // the DbContext is handed to us automatically (dependency injection)
-        public PartsController(AppDbContext db, IConfiguration config)
+        // the DbContext and photo storage are handed to us automatically (dependency injection)
+        public PartsController(AppDbContext db, PhotoStorage photos)
         {
             _db = db;
-            _config = config;
+            _photos = photos;
         }
 
         // GET /api/parts?search=&make=&year=   -> list (with optional search/filter)
@@ -79,8 +78,7 @@ namespace WnWrecker.Api.Controllers
             part.Price = updated.Price;
             part.Status = updated.Status;
             part.Description = updated.Description;
-            // PhotoUrl is NOT touched here — photos only change through the photo upload endpoint,
-            // so editing a part's details never wipes its photo.
+            // PhotoUrl is NOT changed here — photos only change through the upload endpoint below
 
             await _db.SaveChangesAsync();
             return NoContent();      // 204
@@ -95,23 +93,8 @@ namespace WnWrecker.Api.Controllers
             var part = await _db.Parts.FindAsync(id);
             if (part == null) return NotFound();
 
-            // remove the image from storage too, if it has one.
-            // Wrapped in try/catch so a storage problem never blocks deleting the part itself.
-            if (!string.IsNullOrEmpty(part.PhotoUrl))
-            {
-                try
-                {
-                    var containerClient = new BlobContainerClient(
-                        _config["AzureBlob:ConnectionString"],
-                        _config["AzureBlob:Container"]);
-                    var blobName = Path.GetFileName(new Uri(part.PhotoUrl).LocalPath);
-                    await containerClient.DeleteBlobIfExistsAsync(blobName);
-                }
-                catch
-                {
-                    // storage unavailable (e.g. expired account) — carry on and delete the record
-                }
-            }
+            // remove the photo from Cloudinary too (if this fails, still delete the part)
+            try { await _photos.DeleteAsync(part.PhotoUrl); } catch { /* photo clean-up is best-effort */ }
 
             _db.Parts.Remove(part);
             await _db.SaveChangesAsync();
@@ -138,21 +121,24 @@ namespace WnWrecker.Api.Controllers
             if (file.Length > maxBytes)
                 return BadRequest("Image must be 20 MB or smaller.");
 
-            var containerClient = new BlobContainerClient(
-                _config["AzureBlob:ConnectionString"],
-                _config["AzureBlob:Container"]);
+            if (!_photos.IsConfigured)
+                return StatusCode(503, "Photo storage isn't set up yet (Cloudinary keys are missing).");
 
-            var blobName = $"{Guid.NewGuid()}{Path.GetExtension(file.FileName)}";
-            var blobClient = containerClient.GetBlobClient(blobName);
-
-            using (var stream = file.OpenReadStream())
+            string url;
+            try
             {
-                await blobClient.UploadAsync(stream,
-                    new BlobHttpHeaders { ContentType = file.ContentType });
+                url = await _photos.UploadAsync(file);
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(502, ex.Message);
             }
 
-            part.PhotoUrl = blobClient.Uri.ToString();
+            // replacing a photo: delete the old one so Cloudinary doesn't fill up
+            var oldUrl = part.PhotoUrl;
+            part.PhotoUrl = url;
             await _db.SaveChangesAsync();
+            try { await _photos.DeleteAsync(oldUrl); } catch { /* best-effort */ }
 
             return Ok(new { url = part.PhotoUrl });
         }
