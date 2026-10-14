@@ -1,10 +1,12 @@
 <Project Sdk="Microsoft.NET.Sdk.Web">
 
-  <PropertyGroup>
+    <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <UserSecretsId>d767b4df-0daf-4852-b42e-e71e452f4b82</UserSecretsId>
+    <!-- TEMP: hides the System.Security.Cryptography.Pkcs advisory so EF migrations can run. Remove after the Cloudinary switch. -->
+    <NoWarn>$(NoWarn);NU1902;NU1903</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>

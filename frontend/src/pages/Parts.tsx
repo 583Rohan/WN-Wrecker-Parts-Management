@@ -159,7 +159,7 @@ export default function Parts() {
         const response = await fetch(`${API}/api/parts${suffix}`, { signal: controller.signal });
         if (!response.ok) throw new Error('We could not load the parts inventory.');
         const data: Part[] = await response.json();
-        setParts(data.filter(part => part.status?.trim().toLowerCase() !== 'sold'));
+        setParts(data.filter(part => part.status?.trim().toLowerCase() === 'in stock'));
       } catch (requestError) {
         if (requestError instanceof DOMException && requestError.name === 'AbortError') return;
         setParts([]);

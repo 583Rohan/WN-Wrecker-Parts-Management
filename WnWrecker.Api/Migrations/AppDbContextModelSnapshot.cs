@@ -33,6 +33,13 @@ namespace WnWrecker.Api.Migrations
                     b.Property<bool>("Archived")
                         .HasColumnType("bit");
 
+                    b.Property<DateTime?>("ClosedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("ClosedBy")
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime2");
 
@@ -48,10 +55,24 @@ namespace WnWrecker.Api.Migrations
                     b.Property<DateTime>("LastMessageAt")
                         .HasColumnType("datetime2");
 
+                    b.Property<string>("ReferenceCode")
+                        .HasMaxLength(12)
+                        .HasColumnType("nvarchar(12)");
+
                     b.Property<Guid>("Token")
                         .HasColumnType("uniqueidentifier");
 
+                    b.Property<string>("TranscriptToken")
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
+
                     b.HasKey("Id");
+
+                    b.HasIndex("ReferenceCode")
+                        .IsUnique()
+                        .HasFilter("[ReferenceCode] IS NOT NULL");
+
+                    b.HasIndex("TranscriptToken");
 
                     b.ToTable("Conversations");
                 });
@@ -94,6 +115,9 @@ namespace WnWrecker.Api.Migrations
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
 
+                    b.Property<DateTime?>("CancelledAt")
+                        .HasColumnType("datetime2");
+
                     b.Property<int?>("ConversationId")
                         .HasColumnType("int");
 
@@ -118,15 +142,34 @@ namespace WnWrecker.Api.Migrations
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
+                    b.Property<DateTime?>("PaidAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("PublicToken")
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)")
+                        .HasDefaultValue("Unpaid");
+
                     b.Property<decimal>("Subtotal")
                         .HasPrecision(18, 2)
                         .HasColumnType("decimal(18,2)");
+
+                    b.Property<string>("Title")
+                        .HasColumnType("nvarchar(max)");
 
                     b.Property<decimal>("Total")
                         .HasPrecision(18, 2)
                         .HasColumnType("decimal(18,2)");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("PublicToken");
 
                     b.ToTable("Invoices");
                 });
@@ -178,6 +221,16 @@ namespace WnWrecker.Api.Migrations
                     b.Property<int>("ConversationId")
                         .HasColumnType("int");
 
+                    b.Property<int?>("InvoiceId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)")
+                        .HasDefaultValue("text");
+
                     b.Property<string>("Sender")
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
@@ -192,6 +245,8 @@ namespace WnWrecker.Api.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("ConversationId");
+
+                    b.HasIndex("InvoiceId");
 
                     b.ToTable("Messages");
                 });
@@ -283,7 +338,14 @@ namespace WnWrecker.Api.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
+                    b.HasOne("WnWrecker.Api.Models.Invoice", "Invoice")
+                        .WithMany()
+                        .HasForeignKey("InvoiceId")
+                        .OnDelete(DeleteBehavior.NoAction);
+
                     b.Navigation("Conversation");
+
+                    b.Navigation("Invoice");
                 });
 
             modelBuilder.Entity("WnWrecker.Api.Models.Conversation", b =>

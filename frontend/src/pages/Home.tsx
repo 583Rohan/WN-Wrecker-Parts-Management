@@ -577,7 +577,7 @@ export default function Home() {
       .then(response => (response.ok ? response.json() : []))
       .then((data: Part[]) => {
         const availableParts = data.filter(
-          part => part.status?.trim().toLowerCase() !== 'sold'
+          part => part.status?.trim().toLowerCase() === 'in stock'
         );
         setParts(availableParts);
       })

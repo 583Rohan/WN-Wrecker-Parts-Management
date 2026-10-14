@@ -79,7 +79,8 @@ namespace WnWrecker.Api.Controllers
             part.Price = updated.Price;
             part.Status = updated.Status;
             part.Description = updated.Description;
-            part.PhotoUrl = updated.PhotoUrl;
+            // PhotoUrl is NOT touched here — photos only change through the photo upload endpoint,
+            // so editing a part's details never wipes its photo.
 
             await _db.SaveChangesAsync();
             return NoContent();      // 204
@@ -94,14 +95,22 @@ namespace WnWrecker.Api.Controllers
             var part = await _db.Parts.FindAsync(id);
             if (part == null) return NotFound();
 
-            // remove the image from Azure too, if it has one
+            // remove the image from storage too, if it has one.
+            // Wrapped in try/catch so a storage problem never blocks deleting the part itself.
             if (!string.IsNullOrEmpty(part.PhotoUrl))
             {
-                var containerClient = new BlobContainerClient(
-                    _config["AzureBlob:ConnectionString"],
-                    _config["AzureBlob:Container"]);
-                var blobName = Path.GetFileName(new Uri(part.PhotoUrl).LocalPath);
-                await containerClient.DeleteBlobIfExistsAsync(blobName);
+                try
+                {
+                    var containerClient = new BlobContainerClient(
+                        _config["AzureBlob:ConnectionString"],
+                        _config["AzureBlob:Container"]);
+                    var blobName = Path.GetFileName(new Uri(part.PhotoUrl).LocalPath);
+                    await containerClient.DeleteBlobIfExistsAsync(blobName);
+                }
+                catch
+                {
+                    // storage unavailable (e.g. expired account) — carry on and delete the record
+                }
             }
 
             _db.Parts.Remove(part);

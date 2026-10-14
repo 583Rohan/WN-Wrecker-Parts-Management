@@ -48,6 +48,9 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     });
 builder.Services.AddAuthorization();
 
+// deletes old chats automatically (closed after 7 days, inactive after 60 — see "ChatCleanup" in appsettings.json)
+builder.Services.AddHostedService<WnWrecker.Api.Services.ChatCleanupService>();
+
 
 // Enable CORS on backend (now browser is allowed to call on APIs)
 builder.Services.AddCors(options =>
@@ -55,7 +58,8 @@ builder.Services.AddCors(options =>
     options.AddPolicy("Frontend", policy =>
         policy.WithOrigins("http://localhost:5173")   // the Vite dev server
               .AllowAnyHeader()
-              .AllowAnyMethod());
+              .AllowAnyMethod()
+              .SetPreflightMaxAge(TimeSpan.FromHours(1)));   // browser remembers the CORS check for an hour
 });
 
 
