@@ -2,12 +2,13 @@ import { Fragment, useCallback, useEffect, useMemo, useState, type ReactNode } f
 import type { Part } from '../../lib/types';
 import { API, authFetch, fmtDate, money, useToast } from '../../lib/admin';
 import {
-  BUSINESS_NAME, downloadInvoicePdf, fetchInvoices, fetchParts, invoiceLink, invoiceShareMessage, isEmail, readError, toIso,
+  downloadInvoicePdf, fetchInvoices, fetchParts, invoiceLink, invoiceShareMessage, isEmail, readError, toIso,
   type Invoice, type InvoiceStatus,
 } from '../../lib/invoices';
 import { ConfirmDialog, Modal, Toast } from '../../components/AdminUI';
 import InvoiceEditor, { Totals } from '../../components/InvoiceEditor';
 import SharePanel from '../../components/SharePanel';
+import { useBusiness } from '../../lib/business';
 import '../../styles/admin.css';
 
 /* ================================ types ================================ */
@@ -31,14 +32,15 @@ function Loading({ label }: { label: string }) {
 
 // share options for one invoice
 function InvoiceShare({ inv, notify, extra }: { inv: Invoice; notify: (t: string, e?: boolean) => void; extra?: ReactNode }) {
+  const { name: businessName } = useBusiness();
   return (
     <SharePanel
       link={invoiceLink(inv.publicToken)}
       title={`Invoice ${inv.number}`}
-      message={invoiceShareMessage(inv)}
+      message={invoiceShareMessage(inv, businessName)}
       emailTo={isEmail(inv.customerContact) ? inv.customerContact!.trim() : null}
-      emailSubject={`Invoice ${inv.number} — ${BUSINESS_NAME}`}
-      signOff={BUSINESS_NAME}
+      emailSubject={`Invoice ${inv.number} — ${businessName}`}
+      signOff={businessName}
       onDownload={() => downloadInvoicePdf(inv)}
       notify={notify}
       extra={extra}

@@ -2,7 +2,6 @@ import type { Part } from './types';
 import { API, authFetch, money } from './admin';
 
 // Shared invoice types + helpers (used by the Invoices page and the Chats "Send invoice" popup)
-export const BUSINESS_NAME = 'WN Wrecker';            // placeholder — shown in share messages
 
 export type InvoiceStatus = 'Unpaid' | 'Paid' | 'Void' | 'Refunded';
 
@@ -39,8 +38,9 @@ export const partLabel = (p: Part) => `${p.name} — ${p.make} ${p.model} ${p.ye
 export const isEmail = (s?: string | null) => !!s && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s.trim());
 export const invoiceLink = (token?: string | null, download = false) =>
   token ? `${API}/api/invoices/p/${token}/pdf${download ? '?download=true' : ''}` : '';
-export const invoiceShareMessage = (inv: Invoice) =>
-  `Hi ${inv.customerName}, here is your invoice ${inv.number} from ${BUSINESS_NAME} for ${money(Number(inv.total))} (incl. GST).`;
+// businessName comes from useBusiness() (appsettings.json → "Business")
+export const invoiceShareMessage = (inv: Invoice, businessName: string) =>
+  `Hi ${inv.customerName}, here is your invoice ${inv.number} from ${businessName} for ${money(Number(inv.total))} (incl. GST).`;
 export const partIdsOf = (inv: Invoice) => inv.items.filter(i => i.partId !== null).map(i => i.partId as number);
 
 // GST-inclusive maths: the price already includes GST, GST = total / 11

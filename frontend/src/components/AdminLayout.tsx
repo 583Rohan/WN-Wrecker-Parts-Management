@@ -3,6 +3,7 @@ import { Link, NavLink, Outlet } from 'react-router-dom';
 import { ConfirmDialog } from './AdminUI';
 import AdminLogin from './AdminLogin';
 import { startPolling } from '../lib/poll';
+import { useBusiness } from '../lib/business';
 import '../styles/admin.css';
 
 const API = import.meta.env.VITE_API_URL;
@@ -18,6 +19,10 @@ export default function AdminLayout() {
   const [token, setToken] = useState<string | null>(() => localStorage.getItem(ADMIN_TOKEN_KEY));
   const [needsReply, setNeedsReply] = useState(0);
   const [confirmLogout, setConfirmLogout] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const { name } = useBusiness();
+
+  useEffect(() => { document.title = `${name} Admin`; }, [name]);
 
   // badge on "Chats" = customers waiting for a reply (refreshes every 15s, or right after a reply)
   useEffect(() => {
@@ -43,8 +48,18 @@ export default function AdminLayout() {
     <div style={{ minHeight: '100vh' }}>
       <header className="nav">
         <div className="container nav-inner">
-          <Link to="/admin" className="brand">WN<span>Wrecker</span> Admin</Link>
-          <nav className="nav-links">
+          <Link to="/admin" className="brand" onClick={() => setMenuOpen(false)}>WN<span>Wrecker</span> Admin</Link>
+          <button
+            type="button"
+            className="nav-toggle"
+            aria-label={menuOpen ? 'Close menu' : 'Open menu'}
+            aria-expanded={menuOpen}
+            onClick={() => setMenuOpen(o => !o)}
+          >
+            {menuOpen ? '✕' : '☰'}
+          </button>
+          {/* on phones this becomes a drop-down menu; tapping any link closes it */}
+          <nav className={`nav-links${menuOpen ? ' open' : ''}`} onClick={() => setMenuOpen(false)}>
             <NavLink to="/admin" end style={linkStyle}>Dashboard</NavLink>
             <NavLink to="/admin/parts" style={linkStyle}>Manage Parts</NavLink>
             <NavLink to="/admin/chats" style={linkStyle}>

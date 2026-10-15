@@ -1,4 +1,4 @@
-﻿using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using WnWrecker.Api.Data;
 using WnWrecker.Api.Models;
@@ -21,19 +21,42 @@ namespace WnWrecker.Api.Controllers
             _photos = photos;
         }
 
-        // GET /api/parts?search=&make=&year=   -> list (with optional search/filter)
+        // GET /api/parts?search=&make=&model=&year=&inStock=true   -> list (with optional search/filters)
+        //   search  : every word must match the name, make, model, year or description (not case-sensitive)
+        //   inStock : true = only parts customers can buy (the shop, car finder and home page use this)
         [EndpointSummary("List / search parts")]
         [HttpGet]
-        public async Task<ActionResult<IEnumerable<Part>>> GetParts(string? search, string? make, string? model, int? year)
+        public async Task<ActionResult<IEnumerable<Part>>> GetParts(string? search, string? make, string? model, int? year, bool? inStock)
         {
             var query = _db.Parts.AsQueryable();
 
+            if (inStock == true)
+                query = query.Where(p => p.Status == "In Stock");
+
             if (!string.IsNullOrWhiteSpace(search))
-                query = query.Where(p => p.Name.Contains(search));
+            {
+                var words = search.Trim().ToLower().Split(' ', StringSplitOptions.RemoveEmptyEntries);
+                foreach (var word in words)
+                {
+                    var w = word;   // each word must appear somewhere
+                    query = query.Where(p =>
+                        p.Name.ToLower().Contains(w) ||
+                        p.Make.ToLower().Contains(w) ||
+                        p.Model.ToLower().Contains(w) ||
+                        p.Year.ToString() == w ||
+                        (p.Description != null && p.Description.ToLower().Contains(w)));
+                }
+            }
             if (!string.IsNullOrWhiteSpace(make))
-                query = query.Where(p => p.Make == make);
+            {
+                var m = make.Trim().ToLower();
+                query = query.Where(p => p.Make.ToLower() == m);
+            }
             if (!string.IsNullOrWhiteSpace(model))
-                query = query.Where(p => p.Model == model);
+            {
+                var md = model.Trim().ToLower();
+                query = query.Where(p => p.Model.ToLower() == md);
+            }
             if (year.HasValue)
                 query = query.Where(p => p.Year == year);
 

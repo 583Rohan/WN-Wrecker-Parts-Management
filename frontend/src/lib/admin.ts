@@ -10,7 +10,11 @@ export function authFetch(url: string, options: RequestInit = {}) {
   headers.set('Authorization', `Bearer ${localStorage.getItem(ADMIN_TOKEN_KEY)}`);
   // give up after 20s so a stuck request can't block the page forever
   return fetch(url, { signal: AbortSignal.timeout(20000), ...options, headers }).then(res => {
-    if (res.status === 401) { localStorage.removeItem(ADMIN_TOKEN_KEY); window.location.reload(); }
+    if (res.status === 401) {
+      localStorage.removeItem(ADMIN_TOKEN_KEY);
+      try { sessionStorage.setItem('wnwrecker_admin_expired', '1'); } catch { /* ignore */ }   // login page explains why
+      window.location.reload();
+    }
     return res;
   });
 }

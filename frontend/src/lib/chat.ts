@@ -77,6 +77,9 @@ export async function sendChatMessage(token: string, text: string) {
   await fetch(`${API}/api/chat/${token}/messages`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text }) });
 }
 export async function requestHuman(token: string) { await fetch(`${API}/api/chat/${token}/human`, { method: 'POST' }); }
+export async function saveChatDetails(token: string, name: string | null, contact: string | null) {
+  await fetch(`${API}/api/chat/${token}/details`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, contact }) });
+}
 export function openChat() { window.dispatchEvent(new CustomEvent('wn-open-chat')); }
 
 // "Ask about this part" / cart enquiry: attach the parts, hand straight to a person, open the widget

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import type { Part } from '../lib/types';
 import PartCard from '../components/PartCard';
 
@@ -130,8 +130,9 @@ function SearchIcon() {
 
 export default function Parts() {
   const [parts, setParts] = useState<Part[]>([]);
-  const [search, setSearch] = useState('');
-  const [make, setMake] = useState('');
+  const [searchParams] = useSearchParams();
+  const [search, setSearch] = useState(() => searchParams.get('search') ?? '');
+  const [make, setMake] = useState(() => searchParams.get('make') ?? '');   // e.g. /parts?make=BMW from the home page
   const [makes, setMakes] = useState<string[]>([]);
   const [sort, setSort] = useState<SortOption>('featured');
   const [loading, setLoading] = useState(true);
@@ -150,16 +151,15 @@ export default function Parts() {
     const timer = window.setTimeout(async () => {
       setLoading(true);
       setError('');
-      const params = new URLSearchParams();
+      const params = new URLSearchParams({ inStock: 'true' });   // only parts customers can buy
       if (search.trim()) params.set('search', search.trim());
       if (make) params.set('make', make);
 
       try {
-        const suffix = params.toString() ? `?${params.toString()}` : '';
-        const response = await fetch(`${API}/api/parts${suffix}`, { signal: controller.signal });
+        const response = await fetch(`${API}/api/parts?${params.toString()}`, { signal: controller.signal });
         if (!response.ok) throw new Error('We could not load the parts inventory.');
         const data: Part[] = await response.json();
-        setParts(data.filter(part => part.status?.trim().toLowerCase() === 'in stock'));
+        setParts(data);
       } catch (requestError) {
         if (requestError instanceof DOMException && requestError.name === 'AbortError') return;
         setParts([]);
@@ -194,7 +194,7 @@ export default function Parts() {
           <div className="shop-hero-inner">
             <p className="shop-eyebrow">Quality recycled auto parts</p>
             <h1>Find the right <span>part.</span></h1>
-            <p className="shop-hero-copy">Search inspected parts by name or vehicle make. Every sold item is automatically removed from this customer inventory.</p>
+            <p className="shop-hero-copy">Search by part, make, model or year — for example "Corolla bumper". Sold parts are removed automatically.</p>
           </div>
         </section>
 
@@ -212,6 +212,7 @@ export default function Parts() {
               <label htmlFor="parts-make">Vehicle make</label>
               <select id="parts-make" className="shop-input" value={make} onChange={event => setMake(event.target.value)}>
                 <option value="">All makes</option>
+                {make && !makes.includes(make) && <option value={make}>{make}</option>}
                 {makes.map(item => <option key={item} value={item}>{item}</option>)}
               </select>
             </div>
@@ -243,7 +244,7 @@ export default function Parts() {
             ) : error ? (
               <div className="shop-state"><span className="shop-state-icon">!</span><h3>Inventory unavailable</h3><p>{error}</p><button className="shop-primary" type="button" onClick={() => setRetryKey(key => key + 1)}>Try again</button></div>
             ) : displayedParts.length === 0 ? (
-              <div className="shop-state"><span className="shop-state-icon">⌕</span><h3>No matching parts</h3><p>Try clearing your filters, search for another part, or let our team locate it for you.</p>{hasFilters ? <button className="shop-primary" type="button" onClick={clearFilters}>Clear filters</button> : <Link className="shop-primary" to="/contact">Request a part</Link>}</div>
+              <div className="shop-state"><span className="shop-state-icon">⌕</span><h3>No matching parts</h3><p>Try clearing your filters, search for another part, or let our team locate it for you.</p>{hasFilters ? <button className="shop-primary" type="button" onClick={clearFilters}>Clear filters</button> : <Link className="shop-primary" to="/contact#request">Request a part</Link>}</div>
             ) : (
               <div className="shop-grid">{displayedParts.map(part => <PartCard key={part.id} part={part} />)}</div>
             )}

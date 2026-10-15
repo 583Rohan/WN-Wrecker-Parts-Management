@@ -1,4 +1,4 @@
-﻿namespace WnWrecker.Api.Services;
+namespace WnWrecker.Api.Services;
 
 public enum BotAction { Answer, Options, Handoff }
 
@@ -8,7 +8,29 @@ public record FaqEntry(string Question, string[] Keywords, string Answer);
 
 public static class FaqBot
 {
-    public const string Hours = "Our hours are Mon–Fri 8am–5pm and Sat 9am–1pm.";
+    // Business details come from the "Business" section of appsettings.json (set once at start-up in Program.cs).
+    // Answers below use {NAME}, {ADDRESS}, {PHONE}, {EMAIL} and {HOURS}, which are filled in from there.
+    private static Dictionary<string, string> _business = new()
+    {
+        ["{NAME}"] = "WN Wrecker", ["{ADDRESS}"] = "[address]", ["{PHONE}"] = "[phone]",
+        ["{EMAIL}"] = "[email]", ["{HOURS}"] = "[opening hours]",
+    };
+
+    public static void UseBusinessDetails(IConfiguration business)
+    {
+        string Get(string key, string fallback) => string.IsNullOrWhiteSpace(business[key]) ? fallback : business[key]!;
+        _business = new Dictionary<string, string>
+        {
+            ["{NAME}"] = Get("Name", "WN Wrecker"),
+            ["{ADDRESS}"] = Get("Address", "[address]"),
+            ["{PHONE}"] = Get("Phone", "[phone]"),
+            ["{EMAIL}"] = Get("Email", "[email]"),
+            ["{HOURS}"] = Get("Hours", "[opening hours]"),
+        };
+    }
+
+    private static string Fill(string text) =>
+        _business.Aggregate(text, (t, kv) => t.Replace(kv.Key, kv.Value));
 
     private static readonly string[] Greetings = { "hi", "hello", "hey", "good morning", "good afternoon" };
     private static readonly string[] Acknowledgements =
@@ -23,10 +45,10 @@ public static class FaqBot
     {
         new FaqEntry("What are your opening hours?",
             new[] { "hour", "open", "close", "time" },
-            "We're open Mon–Fri 8am–5pm and Sat 9am–1pm. Closed Sundays and public holidays."),
+            "We're open {HOURS}."),
         new FaqEntry("Where are you located?",
             new[] { "where", "location", "address", "located" },
-            "We're located at [ADDRESS]. Ask us for directions any time!"),
+            "We're located at {ADDRESS}. Ask us for directions any time!"),
         new FaqEntry("Do you deliver or ship parts?",
             new[] { "deliver", "delivery", "ship", "post", "freight" },
             "Yes, we can arrange delivery for most parts. Cost depends on size and your postcode."),
@@ -38,17 +60,17 @@ public static class FaqBot
             "Most parts come with a limited warranty. Terms vary by part, so ask us about the specific item."),
         new FaqEntry("Call or email us directly",
             new[] { "call", "phone", "email", "contact", "number", "speak", "talk to someone" },
-            "You can reach our team directly on [phone] or at [email]. We're happy to help!"),
+            "You can reach our team directly on {PHONE} or at {EMAIL}. We're happy to help!"),
     };
 
     public static string[] SuggestedQuestions => Faqs.Select(f => f.Question).ToArray();
 
-    private static readonly string HandoffMessage =
-        $"Thanks! I've passed this to our team — please hold tight and they'll reply as soon as they can. {Hours}";
+    private static string HandoffMessage =>
+        Fill("Thanks! I've passed this to our team — please hold tight and they'll reply as soon as they can. Our hours: {HOURS}.");
     private static readonly string NoMatchMessage =
-        "I'm not sure I got that — try rephrasing, tap a suggested question with the ? button, or press \"Talk to a human\" and our team will help.";
+        "I'm not sure I got that — try rephrasing, tap a suggested question, or press \"Talk to a person\" and our team will help.";
     public static string HumanRequestedMessage =>
-        $"You're now connected to our team. We'll reply as soon as we can. {Hours}";
+        Fill("You're now connected to our team. We'll reply as soon as we can. Our hours: {HOURS}.");
 
     public static BotResult Evaluate(string message)
     {
@@ -79,7 +101,7 @@ public static class FaqBot
 
         // one clear top match -> answer it
         if (matches.Count == 1 || matches[0].score > matches[1].score)
-            return new BotResult(BotAction.Answer, matches[0].f.Answer, Array.Empty<string>());
+            return new BotResult(BotAction.Answer, Fill(matches[0].f.Answer), Array.Empty<string>());
 
         // several equally-likely -> offer options
         var options = matches.Where(x => x.score == matches[0].score)
