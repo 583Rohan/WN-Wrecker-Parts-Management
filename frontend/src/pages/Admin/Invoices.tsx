@@ -1,237 +1,537 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { Fragment, useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import type { Part } from '../../lib/types';
+import { API, authFetch, fmtDate, money, useToast } from '../../lib/admin';
+import {
+  BUSINESS_NAME, downloadInvoicePdf, fetchInvoices, fetchParts, invoiceLink, invoiceShareMessage, isEmail, readError, toIso,
+  type Invoice, type InvoiceStatus,
+} from '../../lib/invoices';
+import { ConfirmDialog, Modal, Toast } from '../../components/AdminUI';
+import InvoiceEditor, { Totals } from '../../components/InvoiceEditor';
+import SharePanel from '../../components/SharePanel';
+import '../../styles/admin.css';
 
-const API = import.meta.env.VITE_API_URL;
-const ADMIN_TOKEN_KEY = 'wnwrecker_admin_token';
+/* ================================ types ================================ */
+type Tab = 'all' | 'new';
+type SortKey = 'newest' | 'oldest' | 'amount-high' | 'amount-low';
+type DateFilter = 'all' | '7' | '30' | 'month';
+type PendingAction = { kind: 'paid' | 'unpaid' | 'void'; inv: Invoice };
 
-type Line = { partId: number | null; description: string; quantity: number; unitPrice: number };
-type InvoiceSummary = { id: number; number: string; customerName: string; customerContact: string | null; total: number; createdAt: string; itemCount: number };
+const STATUS_CLASS: Record<InvoiceStatus, string> = { Unpaid: 'unpaid', Paid: 'paid', Void: 'void', Refunded: 'refunded' };
+function StatusBadge({ status }: { status: InvoiceStatus }) {
+  return <span className={`adm-badge ${STATUS_CLASS[status] ?? 'void'}`}>{status}</span>;
+}
 
-const money = (n: number) => '$' + Number(n || 0).toLocaleString('en-AU', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-const fmtDate = (iso: string) => {
-  if (!iso) return '';
-  const norm = /Z|[+-]\d{2}:?\d{2}$/.test(iso) ? iso : iso + 'Z';
-  const d = new Date(norm);
-  return isNaN(d.getTime()) ? '' : d.toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' });
-};
+function DetailItem({ label, children }: { label: string; children: ReactNode }) {
+  return <div className="adm-detail-item"><span>{label}</span><strong>{children}</strong></div>;
+}
 
-const styles = `
-  .iv-eyebrow { color:#b87100; font-size:.72rem; font-weight:800; letter-spacing:.18em; text-transform:uppercase; margin:0 0 6px; }
-  .iv-head h1 { margin:0 0 22px; color:#0d1930; font-size:2rem; letter-spacing:-.03em; }
-  .iv-panel { border:1px solid #dfe5ec; border-radius:14px; background:#fff; box-shadow:0 10px 30px rgba(13,25,48,.05); margin-bottom:22px; }
-  .iv-panel-head { padding:16px 20px; border-bottom:1px solid #eef2f6; }
-  .iv-panel-head h2 { margin:0; color:#0d1930; font-size:1.1rem; }
-  .iv-body { padding:20px; }
-  .iv-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:14px; margin-bottom:16px; }
-  .iv-field { display:grid; gap:6px; }
-  .iv-field label { color:#334155; font-size:.78rem; font-weight:800; }
-  .iv-input { width:100%; min-height:42px; padding:9px 11px; box-sizing:border-box; border:1px solid #d5dde7; border-radius:8px; background:#fbfcfe; font:inherit; }
-  .iv-input:focus { outline:none; border-color:#f7a411; background:#fff; box-shadow:0 0 0 3px rgba(247,164,17,.14); }
-  textarea.iv-input { min-height:64px; resize:vertical; }
-  .iv-add { display:flex; gap:10px; flex-wrap:wrap; margin-bottom:14px; }
-  .iv-btn { padding:9px 15px; border-radius:8px; font-weight:800; font-size:.83rem; cursor:pointer; border:1px solid #cbd5e1; background:#fff; color:#0d1930; }
-  .iv-btn:hover { border-color:#f7a411; background:#fffaf0; }
-  .iv-btn.primary { background:#f7a411; border-color:#f7a411; color:#111827; }
-  .iv-btn.primary:disabled { opacity:.6; cursor:not-allowed; }
-  .iv-table { width:100%; border-collapse:collapse; }
-  .iv-table th { padding:9px 10px; text-align:left; color:#607089; background:#f4f7fa; font-size:.68rem; letter-spacing:.08em; text-transform:uppercase; }
-  .iv-table td { padding:8px 10px; border-top:1px solid #edf0f4; font-size:.85rem; vertical-align:middle; }
-  .iv-line-input { width:100%; min-height:36px; padding:6px 9px; box-sizing:border-box; border:1px solid #d5dde7; border-radius:6px; background:#fff; font:inherit; }
-  .iv-num { width:90px; }
-  .iv-remove { color:#b91c1c; border:1px solid #f1a2a2; background:#fff; border-radius:6px; padding:5px 9px; cursor:pointer; font-size:.75rem; font-weight:700; }
-  .iv-totals { margin-top:16px; display:flex; justify-content:flex-end; }
-  .iv-totals div { min-width:230px; }
-  .iv-totals .row { display:flex; justify-content:space-between; padding:3px 0; font-size:.9rem; color:#334155; }
-  .iv-totals .grand { border-top:2px solid #0d1930; margin-top:6px; padding-top:8px; font-size:1.1rem; font-weight:900; color:#0d1930; }
-  .iv-save-row { margin-top:18px; display:flex; align-items:center; gap:12px; }
-  .iv-amt { color:#cf7800; font-weight:900; }
-  .iv-empty { padding:28px 20px; color:#94a3b8; }
-  .iv-toast { position:fixed; z-index:100; right:24px; bottom:24px; max-width:360px; padding:13px 16px; border-radius:10px; color:#fff; background:#0d1930; box-shadow:0 16px 45px rgba(0,0,0,.25); }
-  .iv-toast.err { background:#991b1b; }
-`;
+function Loading({ label }: { label: string }) {
+  return <div className="adm-loading"><span className="adm-spinner" /><span>{label}</span></div>;
+}
 
+// share options for one invoice
+function InvoiceShare({ inv, notify, extra }: { inv: Invoice; notify: (t: string, e?: boolean) => void; extra?: ReactNode }) {
+  return (
+    <SharePanel
+      link={invoiceLink(inv.publicToken)}
+      title={`Invoice ${inv.number}`}
+      message={invoiceShareMessage(inv)}
+      emailTo={isEmail(inv.customerContact) ? inv.customerContact!.trim() : null}
+      emailSubject={`Invoice ${inv.number} — ${BUSINESS_NAME}`}
+      signOff={BUSINESS_NAME}
+      onDownload={() => downloadInvoicePdf(inv)}
+      notify={notify}
+      extra={extra}
+    />
+  );
+}
+
+/* ---------- compact invoice list, tap a row to expand (one at a time) ---------- */
+function InvoiceList({ invoices, expandedId, onToggle, actions }: {
+  invoices: Invoice[];
+  expandedId: number | null;
+  onToggle: (id: number) => void;
+  actions: (inv: Invoice) => ReactNode;
+}) {
+  return (
+    <div className="adm-table-wrap">
+      <table className="adm-table adm-list">
+        <thead>
+          <tr><th>Invoice</th><th>Total</th><th>Status</th><th className="adm-chevron-cell"><span className="adm-sr">Expand</span></th></tr>
+        </thead>
+        <tbody>
+          {invoices.map(inv => {
+            const open = expandedId === inv.id;
+            const cancelled = inv.status === 'Void' || inv.status === 'Refunded';
+            return (
+              <Fragment key={inv.id}>
+                <tr
+                  className={`adm-row${open ? ' open' : ''}`}
+                  tabIndex={0}
+                  aria-expanded={open}
+                  onClick={() => onToggle(inv.id)}
+                  onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onToggle(inv.id); } }}
+                >
+                  <td>
+                    <div className="adm-strong">{inv.title || inv.customerName}</div>
+                    <div className="adm-sub">{inv.number}{inv.title ? ` · ${inv.customerName}` : ''} · {fmtDate(inv.createdAt)} · {inv.items.length} item{inv.items.length === 1 ? '' : 's'}</div>
+                  </td>
+                  <td><span className={cancelled ? 'adm-strike' : 'adm-price'}>{money(Number(inv.total))}</span></td>
+                  <td><StatusBadge status={inv.status} /></td>
+                  <td className="adm-chevron-cell"><span className={`adm-chevron${open ? ' open' : ''}`} aria-hidden="true">▾</span></td>
+                </tr>
+                {open && (
+                  <tr className="adm-detail-row">
+                    <td colSpan={4}>
+                      <div className="adm-detail split">
+                        <div className="adm-info-list">
+                          <DetailItem label="Invoice">{inv.number}</DetailItem>
+                          {inv.title && <DetailItem label="Title">{inv.title}</DetailItem>}
+                          <DetailItem label="Customer">{inv.customerName}</DetailItem>
+                          <DetailItem label="Contact">{inv.customerContact || '—'}</DetailItem>
+                          <DetailItem label="Created">{fmtDate(inv.createdAt, true)}</DetailItem>
+                          {inv.paidAt && <DetailItem label="Paid">{fmtDate(inv.paidAt, true)}</DetailItem>}
+                          {inv.cancelledAt && <DetailItem label={inv.status === 'Refunded' ? 'Refunded' : 'Voided'}>{fmtDate(inv.cancelledAt, true)}</DetailItem>}
+                          {inv.conversationId && <DetailItem label="From chat">#{inv.conversationId}</DetailItem>}
+                        </div>
+                        <div className="adm-detail-main">
+                          <table className="adm-lines">
+                            <thead><tr><th>Item</th><th className="num">Qty</th><th className="num">Unit</th><th className="num">Amount</th></tr></thead>
+                            <tbody>
+                              {inv.items.map(it => (
+                                <tr key={it.id}>
+                                  <td>{it.description}{it.partId !== null && <> <span className="adm-tag">stock part</span></>}</td>
+                                  <td className="num">{it.quantity}</td>
+                                  <td className="num">{money(Number(it.unitPrice))}</td>
+                                  <td className="num">{money(Number(it.lineTotal))}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                          <Totals subtotal={Number(inv.subtotal)} gst={Number(inv.gst)} total={Number(inv.total)} />
+                          {inv.notes && (
+                            <div className="adm-detail-desc">
+                              <span>Notes</span>
+                              <p>{inv.notes}</p>
+                            </div>
+                          )}
+                          <div className="adm-detail-actions">{actions(inv)}</div>
+                        </div>
+                      </div>
+                    </td>
+                  </tr>
+                )}
+              </Fragment>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+/* ================================ page ================================ */
 export default function Invoices() {
-  const [searchParams] = useSearchParams();
-  const conversationId = searchParams.get('conversationId');
-
+  // dashboard links: ?tab=new, ?status=Unpaid, ?open=<invoice id>
+  const [tab, setTab] = useState<Tab>(() => (new URLSearchParams(window.location.search).get('tab') === 'new' ? 'new' : 'all'));
+  const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [parts, setParts] = useState<Part[]>([]);
-  const [history, setHistory] = useState<InvoiceSummary[]>([]);
-  const [customerName, setCustomerName] = useState('');
-  const [customerContact, setCustomerContact] = useState('');
-  const [notes, setNotes] = useState('');
-  const [lines, setLines] = useState<Line[]>([]);
-  const [saving, setSaving] = useState(false);
-  const [message, setMessage] = useState<{ text: string; err: boolean } | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [editorKey, setEditorKey] = useState(0);
+  const { toast, notify } = useToast();
 
-  const notify = useCallback((text: string, err = false) => setMessage({ text, err }), []);
-  useEffect(() => { if (!message) return; const t = setTimeout(() => setMessage(null), 3800); return () => clearTimeout(t); }, [message]);
+  // list filters
+  const [query, setQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState<'All' | InvoiceStatus>(() => {
+    const s = new URLSearchParams(window.location.search).get('status');
+    return s === 'Unpaid' || s === 'Paid' || s === 'Void' || s === 'Refunded' ? s : 'All';
+  });
+  const [dateFilter, setDateFilter] = useState<DateFilter>('all');
+  const [sort, setSort] = useState<SortKey>('newest');
+  const [expandedId, setExpandedId] = useState<number | null>(() => Number(new URLSearchParams(window.location.search).get('open')) || null);
+  const toggleRow = (id: number) => setExpandedId(cur => (cur === id ? null : id));
+  const goTab = (t: Tab) => { setTab(t); setExpandedId(null); };
 
-  const authFetch = useCallback((url: string, options: RequestInit = {}) => {
-    const headers = new Headers(options.headers);
-    headers.set('Authorization', `Bearer ${localStorage.getItem(ADMIN_TOKEN_KEY)}`);
-    return fetch(url, { ...options, headers });
-  }, []);
+  // popups
+  const [created, setCreated] = useState<Invoice | null>(null);
+  const [sharing, setSharing] = useState<Invoice | null>(null);
+  const [pending, setPending] = useState<PendingAction | null>(null);
+  const [refunding, setRefunding] = useState<Invoice | null>(null);
+  const [choices, setChoices] = useState<Record<number, 'stock' | 'writeoff'>>({});
+  const [acting, setActing] = useState(false);
 
-  const loadHistory = useCallback(async () => {
-    const res = await authFetch(`${API}/api/admin/invoices`);
-    if (res.ok) setHistory(await res.json());
-  }, [authFetch]);
-
+  /* ---------- loading ---------- */
   useEffect(() => {
-    fetch(`${API}/api/parts`).then(r => (r.ok ? r.json() : [])).then(setParts).catch(() => {});
-    void loadHistory();
-  }, [loadHistory]);
+    let cancelled = false;
+    Promise.all([fetchInvoices(), fetchParts()])
+      .then(([inv, p]) => { if (!cancelled) { setInvoices(inv); setParts(p); } })
+      .catch(e => { if (!cancelled) notify(e instanceof Error ? e.message : 'Could not load invoices.', true); })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [notify]);
 
-  // prefill from a chat enquiry
+  // when opened from the dashboard (?open=…), scroll the opened invoice into view once loaded
   useEffect(() => {
-    if (!conversationId) return;
-    (async () => {
-      const res = await authFetch(`${API}/api/admin/chats/${conversationId}`);
-      if (!res.ok) return;
-      const convo = await res.json();
-      setCustomerName(convo.customerName || '');
-      setCustomerContact(convo.customerContact || '');
-      const newLines: Line[] = [];
-      for (const p of convo.parts || []) {
-        const pr = await fetch(`${API}/api/parts/${p.partId}`);
-        if (pr.ok) {
-          const part = await pr.json();
-          newLines.push({ partId: part.id, description: `${part.name} — ${part.make} ${part.model} ${part.year}`, quantity: 1, unitPrice: Number(part.price) });
-        }
+    if (!loading) document.querySelector('.adm-row.open')?.scrollIntoView({ block: 'center' });
+  }, [loading]);
+
+  const reload = useCallback(async () => {
+    try {
+      const [inv, p] = await Promise.all([fetchInvoices(), fetchParts()]);
+      setInvoices(inv);
+      setParts(p);
+    } catch (e) {
+      notify(e instanceof Error ? e.message : 'Could not refresh.', true);
+    }
+  }, [notify]);
+
+  /* ---------- derived data ---------- */
+  const stats = useMemo(() => {
+    const now = new Date();
+    const sum = (list: Invoice[]) => list.reduce((s, i) => s + Number(i.total || 0), 0);
+    const unpaid = invoices.filter(i => i.status === 'Unpaid');
+    const paid = invoices.filter(i => i.status === 'Paid');
+    const paidThisMonth = paid.filter(i => {
+      const d = new Date(toIso(i.paidAt));
+      return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+    });
+    const oldest = [...unpaid].sort((a, b) => a.id - b.id)[0] ?? null;
+    const oldestDays = oldest ? Math.max(0, Math.floor((now.getTime() - new Date(toIso(oldest.createdAt)).getTime()) / 86_400_000)) : 0;
+    return {
+      oldest,
+      oldestDays,
+      total: invoices.length,
+      unpaidCount: unpaid.length,
+      unpaidSum: sum(unpaid),
+      paidCount: paid.length,
+      paidSum: sum(paid),
+      monthSum: sum(paidThisMonth),
+      cancelled: invoices.filter(i => i.status === 'Void' || i.status === 'Refunded').length,
+    };
+  }, [invoices]);
+
+  const visible = useMemo(() => {
+    const term = query.trim().toLowerCase();
+    const now = new Date();
+    const list = invoices.filter(inv => {
+      if (statusFilter !== 'All' && inv.status !== statusFilter) return false;
+      if (dateFilter !== 'all') {
+        const d = new Date(toIso(inv.createdAt));
+        if (dateFilter === 'month') {
+          if (d.getMonth() !== now.getMonth() || d.getFullYear() !== now.getFullYear()) return false;
+        } else if (now.getTime() - d.getTime() > Number(dateFilter) * 86_400_000) return false;
       }
-      if (newLines.length) setLines(newLines);
-    })();
-  }, [conversationId, authFetch]);
+      if (!term) return true;
+      const haystack = `${inv.number} ${inv.title ?? ''} ${inv.customerName} ${inv.customerContact ?? ''} ${inv.items.map(i => i.description).join(' ')}`.toLowerCase();
+      return haystack.includes(term);
+    });
+    switch (sort) {
+      case 'oldest': list.sort((a, b) => a.id - b.id); break;
+      case 'amount-high': list.sort((a, b) => Number(b.total) - Number(a.total)); break;
+      case 'amount-low': list.sort((a, b) => Number(a.total) - Number(b.total)); break;
+      default: list.sort((a, b) => b.id - a.id);
+    }
+    return list;
+  }, [invoices, query, statusFilter, dateFilter, sort]);
 
-  const addPartLine = (p: Part) => setLines(ls => [...ls, { partId: p.id, description: `${p.name} — ${p.make} ${p.model} ${p.year}`, quantity: 1, unitPrice: Number(p.price) }]);
-  const addCustomLine = () => setLines(ls => [...ls, { partId: null, description: '', quantity: 1, unitPrice: 0 }]);
-  const updateLine = (i: number, patch: Partial<Line>) => setLines(ls => ls.map((l, idx) => (idx === i ? { ...l, ...patch } : l)));
-  const removeLine = (i: number) => setLines(ls => ls.filter((_, idx) => idx !== i));
+  const filtersActive = query.trim() !== '' || statusFilter !== 'All' || dateFilter !== 'all' || sort !== 'newest';
+  const clearFilters = () => { setQuery(''); setStatusFilter('All'); setDateFilter('all'); setSort('newest'); };
 
-  const subtotal = useMemo(() => lines.reduce((s, l) => s + l.unitPrice * l.quantity, 0), [lines]);
-  const gst = useMemo(() => Math.round(subtotal * 0.1 * 100) / 100, [subtotal]);
-  const total = subtotal + gst;
-
-  const downloadPdf = async (id: number, number: string) => {
-    const res = await authFetch(`${API}/api/admin/invoices/${id}/pdf`);
-    if (!res.ok) { notify('Could not download the PDF.', true); return; }
-    const blob = await res.blob();
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url; a.download = `${number}.pdf`;
-    document.body.appendChild(a); a.click(); a.remove();
-    URL.revokeObjectURL(url);
+  /* ---------- after the New invoice form creates one ---------- */
+  const handleCreated = async (inv: Invoice) => {
+    await reload();
+    setEditorKey(k => k + 1);
+    setTab('all');
+    setExpandedId(inv.id);
+    setCreated(inv);
   };
 
-  const save = async () => {
-    if (!customerName.trim()) { notify('Customer name is required.', true); return; }
-    if (lines.length === 0) { notify('Add at least one item.', true); return; }
-    if (lines.some(l => !l.description.trim())) { notify('Every line needs a description.', true); return; }
-    setSaving(true);
+  /* ---------- status changes ---------- */
+  const runAction = async (inv: Invoice, path: string, body: unknown, success: string) => {
+    setActing(true);
     try {
-      const body = {
-        customerName: customerName.trim(),
-        customerContact: customerContact.trim() || null,
-        notes: notes.trim() || null,
-        conversationId: conversationId ? Number(conversationId) : null,
-        items: lines.map(l => ({ partId: l.partId, description: l.description.trim(), quantity: l.quantity, unitPrice: l.unitPrice })),
-      };
-      const res = await authFetch(`${API}/api/admin/invoices`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-      if (!res.ok) throw new Error('The invoice could not be saved.');
-      const data = await res.json();
-      notify(`Invoice ${data.number} created.`);
-      setCustomerName(''); setCustomerContact(''); setNotes(''); setLines([]);
-      await loadHistory();
-      await downloadPdf(data.id, data.number);
+      const res = await authFetch(`${API}/api/admin/invoices/${inv.id}/${path}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body ?? {}),
+      });
+      if (!res.ok) throw new Error(await readError(res, 'That action failed.'));
+      notify(success);
+      setPending(null);
+      setRefunding(null);
+      setCreated(null);
+      await reload();
     } catch (e) {
       notify(e instanceof Error ? e.message : 'Something went wrong.', true);
     } finally {
-      setSaving(false);
+      setActing(false);
     }
   };
 
-  return (
+  const confirmPending = () => {
+    if (!pending) return;
+    const { kind, inv } = pending;
+    if (kind === 'paid') void runAction(inv, 'paid', null, `${inv.number} marked as paid.`);
+    if (kind === 'unpaid') void runAction(inv, 'unpaid', null, `${inv.number} moved back to unpaid.`);
+    if (kind === 'void') void runAction(inv, 'void', null, `${inv.number} voided.`);
+  };
+
+  // parts on the invoice that still exist (deleted ones can't be restocked or written off)
+  const refundParts = refunding
+    ? refunding.items.filter(i => i.partId !== null && parts.some(p => p.id === i.partId))
+    : [];
+  const allChosen = refundParts.every(i => choices[i.partId as number]);
+
+  const openRefund = (inv: Invoice) => { setRefunding(inv); setChoices({}); };
+  const confirmRefund = () => {
+    if (!refunding || !allChosen) return;
+    const restock = refundParts.map(i => i.partId as number).filter(pid => choices[pid] === 'stock');
+    const off = refundParts.length - restock.length;
+    const bits = [restock.length ? `${restock.length} back in stock` : '', off ? `${off} written off` : ''].filter(Boolean).join(', ');
+    void runAction(refunding, 'refund', { restockPartIds: restock }, `${refunding.number} refunded${bits ? ` · ${bits}` : ''}.`);
+  };
+
+  const rowActions = (inv: Invoice) => (
     <>
-      <style>{styles}</style>
-      <div className="iv-head">
-        <p className="iv-eyebrow">Billing</p>
-        <h1>Invoices</h1>
-      </div>
+      {inv.status === 'Unpaid' && <button type="button" className="adm-btn primary" onClick={() => setPending({ kind: 'paid', inv })}>Mark as paid</button>}
+      <button type="button" className={`adm-btn${inv.status === 'Unpaid' ? '' : ' primary'}`} onClick={() => setSharing(inv)}>Share</button>
+      <button type="button" className="adm-btn" onClick={() => { downloadInvoicePdf(inv).catch(e => notify(e instanceof Error ? e.message : 'Download failed.', true)); }}>Download PDF</button>
+      {inv.status === 'Paid' && <button type="button" className="adm-btn" onClick={() => setPending({ kind: 'unpaid', inv })}>Mark unpaid</button>}
+      {inv.status === 'Unpaid' && <button type="button" className="adm-btn ghost-danger" onClick={() => setPending({ kind: 'void', inv })}>Void</button>}
+      {inv.status === 'Paid' && <button type="button" className="adm-btn ghost-danger" onClick={() => openRefund(inv)}>Refund &amp; void</button>}
+    </>
+  );
 
-      <section className="iv-panel">
-        <div className="iv-panel-head"><h2>Create an invoice</h2></div>
-        <div className="iv-body">
-          <div className="iv-grid">
-            <div className="iv-field"><label>Customer name *</label><input className="iv-input" value={customerName} onChange={e => setCustomerName(e.target.value)} placeholder="e.g. John Smith" /></div>
-            <div className="iv-field"><label>Contact (email / phone)</label><input className="iv-input" value={customerContact} onChange={e => setCustomerContact(e.target.value)} placeholder="optional" /></div>
-            <div className="iv-field" style={{ gridColumn: '1 / -1' }}><label>Notes</label><textarea className="iv-input" value={notes} onChange={e => setNotes(e.target.value)} placeholder="e.g. pickup Friday, payment on collection" /></div>
-          </div>
+  const partNames = (inv: Invoice) => inv.items.filter(i => i.partId !== null).map(i => i.description);
 
-          <div className="iv-add">
-            <select className="iv-input" style={{ maxWidth: 360 }} value="" onChange={e => { const p = parts.find(x => x.id === Number(e.target.value)); if (p) addPartLine(p); e.currentTarget.value = ''; }}>
-              <option value="">＋ Add a part…</option>
-              {parts.map(p => <option key={p.id} value={p.id}>{p.name} — {p.make} {p.model} {p.year} ({money(Number(p.price))})</option>)}
-            </select>
-            <button type="button" className="iv-btn" onClick={addCustomLine}>＋ Add custom line</button>
-          </div>
+  /* ================================ render ================================ */
+  return (
+    <div className="adm">
+      <header className="adm-header">
+        <div>
+          <p className="adm-eyebrow">Billing</p>
+          <h1>Invoices</h1>
+          <p>Create GST-inclusive tax invoices, share them with customers and track payment.</p>
+        </div>
+      </header>
 
-          {lines.length > 0 && (
-            <table className="iv-table">
-              <thead><tr><th>Description</th><th style={{ width: 90 }}>Qty</th><th style={{ width: 130 }}>Unit price</th><th style={{ width: 120 }}>Amount</th><th style={{ width: 40 }}></th></tr></thead>
-              <tbody>
-                {lines.map((l, i) => (
-                  <tr key={i}>
-                    <td><input className="iv-line-input" value={l.description} onChange={e => updateLine(i, { description: e.target.value })} placeholder="Item description" /></td>
-                    <td><input className="iv-line-input iv-num" type="number" min={1} value={l.quantity} onChange={e => updateLine(i, { quantity: Math.max(1, Number(e.target.value) || 1) })} /></td>
-                    <td><input className="iv-line-input iv-num" type="number" min={0} step="0.01" value={l.unitPrice} onChange={e => updateLine(i, { unitPrice: Number(e.target.value) || 0 })} /></td>
-                    <td><span className="iv-amt">{money(l.unitPrice * l.quantity)}</span></td>
-                    <td><button type="button" className="iv-remove" onClick={() => removeLine(i)}>✕</button></td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
+      <nav className="adm-tabs" role="tablist" aria-label="Invoice sections">
+        <button type="button" role="tab" aria-selected={tab === 'all'} className={`adm-tab${tab === 'all' ? ' active' : ''}`} onClick={() => goTab('all')}>
+          All invoices <span className="adm-tab-count">{stats.total}</span>
+        </button>
+        <button type="button" role="tab" aria-selected={tab === 'new'} className={`adm-tab${tab === 'new' ? ' active' : ''}`} onClick={() => goTab('new')}>
+          New invoice
+        </button>
+      </nav>
 
-          <div className="iv-totals">
+      {/* ---------------- ALL INVOICES ---------------- */}
+      {tab === 'all' && (
+        <>
+          <section className="adm-stats" aria-label="Invoice summary">
+            <div className="adm-stat"><span>Outstanding</span><strong>{money(stats.unpaidSum)}</strong><small>{stats.unpaidCount} unpaid invoice{stats.unpaidCount === 1 ? '' : 's'}</small></div>
+            <div className="adm-stat"><span>Collected</span><strong>{money(stats.paidSum)}</strong><small>{money(stats.monthSum)} this month · {stats.paidCount} paid</small></div>
+            <div className="adm-stat">
+              <span>Oldest unpaid</span>
+              <strong>{stats.oldest ? `${stats.oldestDays} day${stats.oldestDays === 1 ? '' : 's'}` : '—'}</strong>
+              <small>{stats.oldest ? `${stats.oldest.number} · ${stats.oldest.customerName}` : 'nothing to chase up'}</small>
+            </div>
+            <div className="adm-stat"><span>All invoices</span><strong>{stats.total}</strong><small>{stats.cancelled} voided / refunded</small></div>
+          </section>
+
+          <section className="adm-panel">
+            <div className="adm-panel-head">
+              <div>
+                <h2>Invoice history</h2>
+                <p>{visible.length} of {invoices.length} invoices shown · tap an invoice to see details</p>
+              </div>
+            </div>
+
+            <div className="adm-filters">
+              <input className="adm-input" aria-label="Search invoices" placeholder="Search title, number, customer, item…" value={query} onChange={e => setQuery(e.target.value)} />
+              <select className="adm-input" aria-label="Filter by status" value={statusFilter} onChange={e => setStatusFilter(e.target.value as 'All' | InvoiceStatus)}>
+                <option value="All">All statuses</option>
+                <option value="Unpaid">Unpaid</option>
+                <option value="Paid">Paid</option>
+                <option value="Void">Void</option>
+                <option value="Refunded">Refunded</option>
+              </select>
+              <select className="adm-input" aria-label="Filter by date" value={dateFilter} onChange={e => setDateFilter(e.target.value as DateFilter)}>
+                <option value="all">Any date</option>
+                <option value="7">Last 7 days</option>
+                <option value="30">Last 30 days</option>
+                <option value="month">This month</option>
+              </select>
+              <select className="adm-input" aria-label="Sort invoices" value={sort} onChange={e => setSort(e.target.value as SortKey)}>
+                <option value="newest">Newest first</option>
+                <option value="oldest">Oldest first</option>
+                <option value="amount-high">Amount: high → low</option>
+                <option value="amount-low">Amount: low → high</option>
+              </select>
+              <button type="button" className="adm-btn" onClick={clearFilters} disabled={!filtersActive}>Clear</button>
+            </div>
+
+            {loading ? (
+              <Loading label="Loading invoices…" />
+            ) : visible.length === 0 ? (
+              <div className="adm-empty">
+                {invoices.length === 0 ? (
+                  <>
+                    <strong>No invoices yet</strong>
+                    <p>Create your first invoice for a customer.</p>
+                    <button type="button" className="adm-btn primary" onClick={() => goTab('new')}>＋ New invoice</button>
+                  </>
+                ) : (
+                  <>
+                    <strong>No invoices match these filters</strong>
+                    <p>Try a different search or clear the filters.</p>
+                    <button type="button" className="adm-btn" onClick={clearFilters}>Clear filters</button>
+                  </>
+                )}
+              </div>
+            ) : (
+              <InvoiceList invoices={visible} expandedId={expandedId} onToggle={toggleRow} actions={rowActions} />
+            )}
+          </section>
+        </>
+      )}
+
+      {/* ---------------- NEW INVOICE ---------------- */}
+      {tab === 'new' && (
+        <section className="adm-panel">
+          <div className="adm-panel-head">
             <div>
-              <div className="row"><span>Subtotal</span><span>{money(subtotal)}</span></div>
-              <div className="row"><span>GST (10%)</span><span>{money(gst)}</span></div>
-              <div className="row grand"><span>Total</span><span>{money(total)}</span></div>
+              <h2>New invoice</h2>
+              <p>Prices include GST. Creating an invoice doesn't change stock — parts are marked sold when it's paid.</p>
             </div>
           </div>
-
-          <div className="iv-save-row">
-            <button className="iv-btn primary" onClick={save} disabled={saving}>{saving ? 'Saving…' : 'Create invoice & download PDF'}</button>
-            {conversationId && <span className="muted" style={{ fontSize: '.8rem' }}>Prefilled from chat #{conversationId}</span>}
+          <div className="adm-panel-body">
+            <InvoiceEditor
+              key={editorKey}
+              parts={parts}
+              invoices={invoices}
+              notify={notify}
+              onCreated={handleCreated}
+              onCancel={() => goTab('all')}
+              cancelLabel="Back to all invoices"
+            />
           </div>
-        </div>
-      </section>
+        </section>
+      )}
 
-      <section className="iv-panel">
-        <div className="iv-panel-head"><h2>Invoice history</h2></div>
-        {history.length === 0 ? (
-          <div className="iv-empty">No invoices yet.</div>
-        ) : (
-          <table className="iv-table">
-            <thead><tr><th>Number</th><th>Customer</th><th>Items</th><th>Total</th><th>Date</th><th></th></tr></thead>
-            <tbody>
-              {history.map(inv => (
-                <tr key={inv.id}>
-                  <td><strong>{inv.number}</strong></td>
-                  <td>{inv.customerName}</td>
-                  <td>{inv.itemCount}</td>
-                  <td><span className="iv-amt">{money(inv.total)}</span></td>
-                  <td>{fmtDate(inv.createdAt)}</td>
-                  <td><button className="iv-btn" onClick={() => downloadPdf(inv.id, inv.number)}>PDF</button></td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </section>
+      {/* ---------------- INVOICE CREATED ---------------- */}
+      {created && (
+        <Modal
+          wide
+          title="Invoice created"
+          subtitle="What would you like to do with it?"
+          onClose={() => setCreated(null)}
+          footer={<button type="button" className="adm-btn" onClick={() => setCreated(null)}>Done</button>}
+        >
+          <div className="adm-success">
+            <span className="adm-success-mark">✓</span>
+            <div>
+              <strong>{created.number} · {created.title || created.customerName}</strong>
+              <span className="adm-muted" style={{ fontSize: '.82rem' }}>{money(Number(created.total))} incl. {money(Number(created.gst))} GST · Unpaid</span>
+            </div>
+          </div>
+          <p className="adm-hint" style={{ marginBottom: 16 }}>Nothing in the shop changes until you mark it paid.</p>
+          <InvoiceShare
+            inv={created}
+            notify={notify}
+            extra={
+              <button type="button" className="adm-share-opt" onClick={() => setPending({ kind: 'paid', inv: created })}>
+                <span className="adm-share-ico">$</span>
+                <div><strong>Mark as paid now</strong><span>Customer paid on the spot</span></div>
+              </button>
+            }
+          />
+        </Modal>
+      )}
 
-      {message && <div className={`iv-toast${message.err ? ' err' : ''}`}>{message.text}</div>}
-    </>
+      {/* ---------------- SHARE ---------------- */}
+      {sharing && (
+        <Modal
+          wide
+          title={`Share ${sharing.number}`}
+          subtitle={`${sharing.customerName} · ${money(Number(sharing.total))} · ${sharing.status}`}
+          onClose={() => setSharing(null)}
+          footer={<button type="button" className="adm-btn" onClick={() => setSharing(null)}>Close</button>}
+        >
+          <InvoiceShare inv={sharing} notify={notify} />
+          <p className="adm-hint">The link always shows the invoice's latest status (paid, void…). Anyone with the link can view this one invoice — nothing else.</p>
+        </Modal>
+      )}
+
+      {/* ---------------- PAID / UNPAID / VOID CONFIRMATION ---------------- */}
+      {pending && (
+        <ConfirmDialog
+          danger={pending.kind === 'void'}
+          busy={acting}
+          title={pending.kind === 'paid' ? `Mark ${pending.inv.number} as paid?` : pending.kind === 'unpaid' ? `Move ${pending.inv.number} back to unpaid?` : `Void ${pending.inv.number}?`}
+          confirmLabel={pending.kind === 'paid' ? 'Mark as paid' : pending.kind === 'unpaid' ? 'Mark unpaid' : 'Void invoice'}
+          message={
+            pending.kind === 'paid' ? (
+              partNames(pending.inv).length
+                ? <>These parts will be marked <strong>Sold</strong> and removed from the shop: {partNames(pending.inv).join(', ')}.</>
+                : <>This invoice has no stock parts, so nothing in the shop changes.</>
+            ) : pending.kind === 'unpaid' ? (
+              partNames(pending.inv).length
+                ? <>Its parts will go back on sale in the shop: {partNames(pending.inv).join(', ')}.</>
+                : <>The invoice will show as unpaid again.</>
+            ) : (
+              <>The invoice stays on record marked <strong>VOID</strong> and can't be reopened. Its parts stay in stock.</>
+            )
+          }
+          onCancel={() => { if (!acting) setPending(null); }}
+          onConfirm={confirmPending}
+        />
+      )}
+
+      {/* ---------------- REFUND & VOID ---------------- */}
+      {refunding && (
+        <Modal
+          title={`Refund & void ${refunding.number}?`}
+          subtitle={`${refunding.customerName} · ${money(Number(refunding.total))}`}
+          onClose={() => { if (!acting) setRefunding(null); }}
+          footer={
+            <>
+              <button type="button" className="adm-btn" onClick={() => setRefunding(null)} disabled={acting}>Cancel</button>
+              <button type="button" className="adm-btn danger" onClick={confirmRefund} disabled={acting || !allChosen}>{acting ? 'Working…' : 'Refund & void'}</button>
+            </>
+          }
+        >
+          <div className="adm-callout danger">The invoice will be marked <strong>REFUNDED</strong> and can't be reopened. Make sure you've actually returned the money.</div>
+          {refundParts.length > 0 ? (
+            <>
+              <p className="adm-hint" style={{ margin: '16px 0 10px' }}>
+                What happens to each part? <strong>Back in stock</strong> puts it on sale again. <strong>Write off</strong> takes it out of the shop
+                without counting it as sold (e.g. it came back damaged) — you can still relist it later.
+              </p>
+              {refundParts.map(it => {
+                const pid = it.partId as number;
+                const choice = choices[pid];
+                const set = (c: 'stock' | 'writeoff') => setChoices(cs => ({ ...cs, [pid]: c }));
+                return (
+                  <div key={it.id} className={`adm-check${choice ? ' on' : ''}`}>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div className="adm-strong">{it.description}</div>
+                      <div className="adm-sub">{choice === 'stock' ? 'Goes back on sale' : choice === 'writeoff' ? 'Hidden from the shop, not counted as sold' : 'Choose one'}</div>
+                    </div>
+                    <div className="adm-seg" role="group" aria-label={`What to do with ${it.description}`}>
+                      <button type="button" className={choice === 'stock' ? 'on' : ''} onClick={() => set('stock')}>Back in stock</button>
+                      <button type="button" className={choice === 'writeoff' ? 'on danger' : ''} onClick={() => set('writeoff')}>Write off</button>
+                    </div>
+                  </div>
+                );
+              })}
+            </>
+          ) : (
+            <p className="adm-hint" style={{ marginTop: 14 }}>This invoice has no stock parts, so nothing in the shop changes.</p>
+          )}
+        </Modal>
+      )}
+
+      <Toast toast={toast} />
+    </div>
   );
 }

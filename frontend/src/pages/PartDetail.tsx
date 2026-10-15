@@ -32,7 +32,7 @@ export default function PartDetail() {
           </div>
           <div>
             <h1 style={{ margin: '0 0 8px' }}>{part.name}</h1>
-            <span className={`badge ${part.status === 'Sold' ? 'badge-sold' : 'badge-stock'}`}>{part.status}</span>
+            <span className={`badge ${part.status === 'In Stock' ? 'badge-stock' : 'badge-sold'}`}>{part.status === 'Written off' ? 'Unavailable' : part.status}</span>
             <div className="price" style={{ fontSize: 30, margin: '16px 0' }}>${part.price}</div>
             <table style={{ fontSize: 14, marginBottom: 20 }}><tbody>
               <tr><td className="muted" style={{ padding: '2px 16px 2px 0' }}>Make</td><td>{part.make}</td></tr>

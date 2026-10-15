@@ -1,40 +1,43 @@
-import { useState } from 'react';
-import { Link, Outlet } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { Link, NavLink, Outlet } from 'react-router-dom';
+import { ConfirmDialog } from './AdminUI';
+import AdminLogin from './AdminLogin';
+import { startPolling } from '../lib/poll';
+import '../styles/admin.css';
 
 const API = import.meta.env.VITE_API_URL;
 const ADMIN_TOKEN_KEY = 'wnwrecker_admin_token';
 
+// same "current page" highlight as the customer site
+const linkStyle = ({ isActive }: { isActive: boolean }) => ({
+  color: isActive ? 'var(--accent)' : undefined,
+  fontWeight: isActive ? 700 : 400,
+});
+
 export default function AdminLayout() {
   const [token, setToken] = useState<string | null>(() => localStorage.getItem(ADMIN_TOKEN_KEY));
-  const [username, setUsername] = useState('admin');
-  const [password, setPassword] = useState('');
-  const [error, setError] = useState<string | null>(null);
+  const [needsReply, setNeedsReply] = useState(0);
+  const [confirmLogout, setConfirmLogout] = useState(false);
 
-  const login = async () => {
-    setError(null);
-    try {
-      const res = await fetch(`${API}/api/auth/login`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username, password }) });
-      if (!res.ok) { setError('Invalid username or password.'); return; }
-      const data = await res.json();
-      localStorage.setItem(ADMIN_TOKEN_KEY, data.token);
-      setToken(data.token);
-    } catch (err: unknown) { setError(err instanceof Error ? err.message : String(err)); }
-  };
-  const logout = () => { localStorage.removeItem(ADMIN_TOKEN_KEY); setToken(null); };
+  // badge on "Chats" = customers waiting for a reply (refreshes every 15s, or right after a reply)
+  useEffect(() => {
+    if (!token) return;
+    let alive = true;
+    const load = () =>
+      fetch(`${API}/api/admin/chats/summary`, { headers: { Authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(20000) })
+        .then(r => (r.ok ? r.json() : null))
+        .then(d => { if (alive && d) setNeedsReply(d.needsReply ?? 0); })
+        .catch(() => { /* ignore */ });
+    const stop = startPolling(load, 15000);
+    const onChange = () => { void load(); };
+    window.addEventListener('wn-chats-changed', onChange);
+    return () => { alive = false; stop(); window.removeEventListener('wn-chats-changed', onChange); };
+  }, [token]);
 
-  if (!token) {
-    return (
-      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--hero)' }}>
-        <div className="card card-body" style={{ width: 320 }}>
-          <h2 style={{ marginTop: 0 }}>Admin login</h2>
-          {error && <p style={{ color: '#dc2626', fontSize: 14 }}>{error}</p>}
-          <div className="field"><label className="label">Username</label><input className="input" value={username} onChange={e => setUsername(e.target.value)} /></div>
-          <div className="field"><label className="label">Password</label><input className="input" type="password" value={password} onChange={e => setPassword(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') login(); }} /></div>
-          <button className="btn" style={{ width: '100%' }} onClick={login}>Log in</button>
-        </div>
-      </div>
-    );
-  }
+  const logout = () => { localStorage.removeItem(ADMIN_TOKEN_KEY); setToken(null); setConfirmLogout(false); };
+  const onLogin = (t: string) => { localStorage.setItem(ADMIN_TOKEN_KEY, t); setToken(t); };
+
+  if (!token) return <AdminLogin onLogin={onLogin} />;
 
   return (
     <div style={{ minHeight: '100vh' }}>
@@ -42,15 +45,27 @@ export default function AdminLayout() {
         <div className="container nav-inner">
           <Link to="/admin" className="brand">WN<span>Wrecker</span> Admin</Link>
           <nav className="nav-links">
-            <Link to="/admin">Dashboard</Link>
-            <Link to="/admin/parts">Manage Parts</Link>
-            <Link to="/admin/chats">Chats</Link>
-            <Link to="/admin/invoices">Invoices</Link>
-            <button className="btn btn-sm" onClick={logout}>Log out</button>
+            <NavLink to="/admin" end style={linkStyle}>Dashboard</NavLink>
+            <NavLink to="/admin/parts" style={linkStyle}>Manage Parts</NavLink>
+            <NavLink to="/admin/chats" style={linkStyle}>
+              Chats{needsReply > 0 && <span className="adm-nav-badge" title={`${needsReply} chat${needsReply === 1 ? '' : 's'} need a reply`}>{needsReply}</span>}
+            </NavLink>
+            <NavLink to="/admin/invoices" style={linkStyle}>Invoices</NavLink>
+            <button className="btn btn-sm" onClick={() => setConfirmLogout(true)}>Log out</button>
           </nav>
         </div>
       </header>
       <main className="container" style={{ padding: '28px 20px' }}><Outlet /></main>
+
+      {confirmLogout && (
+        <ConfirmDialog
+          title="Log out?"
+          message="You'll need your password to get back into the admin area."
+          confirmLabel="Log out"
+          onCancel={() => setConfirmLogout(false)}
+          onConfirm={logout}
+        />
+      )}
     </div>
   );
 }

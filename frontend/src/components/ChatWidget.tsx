@@ -1,9 +1,23 @@
-import { useEffect, useRef, useState, type CSSProperties } from 'react';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { clearChatSession, getChatSession, rejoinConversation, startConversation } from '../lib/chat';
+import { startPolling } from '../lib/poll';
+import '../styles/chat-widget.css';
 
 const API = import.meta.env.VITE_API_URL;
-const TOKEN_KEY = 'wnwrecker_chat_token';
 
-type ChatMessage = { sender: string; text: string; sentAt: string };
+type ChatInvoice = { number: string; title: string | null; total: number; status: string; publicToken: string | null };
+type ChatMessage = { id?: number; sender: string; text: string; sentAt: string; kind?: string; invoice?: ChatInvoice | null };
+type ChatData = {
+  reference: string | null;
+  handedOff: boolean;
+  closed: boolean;
+  closedBy: string | null;
+  name: string | null;
+  contact: string | null;
+  messages: ChatMessage[];
+};
+
+const emptyChat: ChatData = { reference: null, handedOff: false, closed: false, closedBy: null, name: null, contact: null, messages: [] };
 
 function fmtTime(iso: string) {
   if (!iso) return '';
@@ -13,20 +27,43 @@ function fmtTime(iso: string) {
   return isNaN(d.getTime()) ? '' : d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
 }
 
+const money = (n: number) => '$' + Number(n || 0).toLocaleString('en-AU', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const invoiceUrl = (token: string | null, download = false) =>
+  token ? `${API}/api/invoices/p/${token}/pdf${download ? '?download=true' : ''}` : '#';
+
 export default function ChatWidget() {
   const [open, setOpen] = useState(false);
-  const [token, setToken] = useState<string | null>(() => localStorage.getItem(TOKEN_KEY));
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [token, setToken] = useState<string | null>(() => getChatSession().token);
+  const [chat, setChat] = useState<ChatData>(() => ({ ...emptyChat, reference: getChatSession().reference }));
   const [input, setInput] = useState('');
   const [faqs, setFaqs] = useState<string[]>([]);
   const [botOptions, setBotOptions] = useState<string[]>([]);
-  const [handedOff, setHandedOff] = useState(false);
   const [showSuggestions, setShowSuggestions] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+
+  // rejoin with a reference code
+  const [rejoinOpen, setRejoinOpen] = useState(false);
+  const [rejoinCode, setRejoinCode] = useState('');
+
+  // optional name / contact card (shown when a person joins)
+  const [askDetails, setAskDetails] = useState(false);       // opened by "Talk to a person"
+  const [detailsDone, setDetailsDone] = useState(false);     // saved or skipped this session
+  const [detailName, setDetailName] = useState('');
+  const [detailContact, setDetailContact] = useState('');
+
+  const [confirmClose, setConfirmClose] = useState(false);
+  const [copied, setCopied] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
 
-  // let other pages open the widget ("Ask about this part" / cart enquiry)
+  // other pages open the widget ("Ask about this part" / cart enquiry)
   useEffect(() => {
-    const openHandler = () => { setToken(localStorage.getItem(TOKEN_KEY)); setOpen(true); };
+    const openHandler = () => {
+      const s = getChatSession();
+      setToken(s.token);
+      setChat(c => ({ ...c, reference: s.reference ?? c.reference }));
+      setOpen(true);
+    };
     window.addEventListener('wn-open-chat', openHandler);
     return () => window.removeEventListener('wn-open-chat', openHandler);
   }, []);
@@ -36,117 +73,307 @@ export default function ChatWidget() {
     fetch(`${API}/api/chat/faqs`).then(res => (res.ok ? res.json() : [])).then((d: string[]) => setFaqs(d)).catch(() => {});
   }, [open, faqs.length]);
 
+  // keep the conversation fresh while the widget is open
   useEffect(() => {
     if (!open || !token) return;
-    const load = async () => {
-      try {
-        const res = await fetch(`${API}/api/chat/${token}`);
-        if (!res.ok) return;
-        const data = await res.json();
-        setMessages(data.messages ?? []);
-        setHandedOff(!!data.handedOff);
-      } catch { /* ignore */ }
-    };
-    load();
-    const id = setInterval(load, 2000);
-    return () => clearInterval(id);
+    let alive = true;
+    const load = () =>
+      fetch(`${API}/api/chat/${token}`, { signal: AbortSignal.timeout(15000) })
+        .then(res => {
+          if (res.status === 404) { clearChatSession(); if (alive) { setToken(null); setChat(emptyChat); } return null; }
+          return res.ok ? res.json() : null;
+        })
+        .then(data => {
+          if (!alive || !data) return;
+          setChat({
+            reference: data.reference ?? null,
+            handedOff: !!data.handedOff,
+            closed: !!data.closed,
+            closedBy: data.closedBy ?? null,
+            name: data.name ?? null,
+            contact: data.contact ?? null,
+            messages: data.messages ?? [],
+          });
+        })
+        .catch(() => { /* offline for a moment — try again next time */ });
+    // refresh every 3s while the chat is open (never overlapping, paused while the tab is hidden)
+    const stop = startPolling(load, 3000);
+    return () => { alive = false; stop(); };
   }, [open, token]);
 
-  useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages]);
+  const msgCount = chat.messages.length;
+  useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [msgCount, askDetails, open]);
+
+  const reload = async (t: string) => {
+    const res = await fetch(`${API}/api/chat/${t}`);
+    if (!res.ok) return;
+    const data = await res.json();
+    setChat({
+      reference: data.reference ?? null, handedOff: !!data.handedOff, closed: !!data.closed, closedBy: data.closedBy ?? null,
+      name: data.name ?? null, contact: data.contact ?? null, messages: data.messages ?? [],
+    });
+  };
 
   const ensureToken = async (): Promise<string> => {
     if (token) return token;
-    const res = await fetch(`${API}/api/chat/start`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: null, contact: null }) });
-    const data = await res.json();
-    const t = data.token as string;
-    localStorage.setItem(TOKEN_KEY, t);
-    setToken(t);
-    return t;
+    const s = await startConversation();
+    setToken(s.token);
+    setChat(c => ({ ...c, reference: s.reference }));
+    return s.token;
   };
 
   const send = async (preset?: string) => {
     const text = (preset ?? input).trim();
-    if (!text) return;
+    if (!text || chat.closed) return;
     if (!preset) setInput('');
-    setBotOptions([]); setShowSuggestions(false);
-    const t = await ensureToken();
-    setMessages(prev => [...prev, { sender: 'customer', text, sentAt: new Date().toISOString() }]);
-    const res = await fetch(`${API}/api/chat/${t}/messages`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text }) });
-    if (res.ok) {
-      const data = await res.json();
-      setHandedOff(!!data.handedOff);
-      setBotOptions(data.options ?? []);
-      if (data.botReply) setMessages(prev => [...prev, { sender: 'bot', text: data.botReply as string, sentAt: new Date().toISOString() }]);
+    setBotOptions([]); setShowSuggestions(false); setError('');
+    try {
+      const t = await ensureToken();
+      setChat(c => ({ ...c, messages: [...c.messages, { sender: 'customer', text, sentAt: new Date().toISOString() }] }));
+      const res = await fetch(`${API}/api/chat/${t}/messages`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text }) });
+      if (res.ok) {
+        const data = await res.json();
+        setBotOptions(data.options ?? []);
+      } else {
+        setError('Message not sent. Please try again.');
+      }
+      await reload(t);
+    } catch {
+      setError('Message not sent. Please check your connection.');
     }
   };
 
-  const requestHuman = async () => {
-    const t = await ensureToken();
-    await fetch(`${API}/api/chat/${t}/human`, { method: 'POST' });
-    setHandedOff(true); setBotOptions([]); setShowSuggestions(false);
+  // "Talk to a person": ask for optional details first, then hand over
+  const connectToPerson = async (e?: FormEvent) => {
+    e?.preventDefault();
+    setBusy(true); setError('');
+    try {
+      const t = await ensureToken();
+      if (detailName.trim() || detailContact.trim()) {
+        await fetch(`${API}/api/chat/${t}/details`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: detailName.trim() || null, contact: detailContact.trim() || null }),
+        });
+      }
+      if (!chat.handedOff) await fetch(`${API}/api/chat/${t}/human`, { method: 'POST' });
+      setAskDetails(false); setDetailsDone(true); setBotOptions([]); setShowSuggestions(false);
+      await reload(t);
+    } catch {
+      setError('Could not connect you. Please try again.');
+    } finally {
+      setBusy(false);
+    }
   };
 
-  if (!open) return <button onClick={() => setOpen(true)} style={bubbleStyle}>💬</button>;
+  const rejoin = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!rejoinCode.trim()) return;
+    setBusy(true); setError('');
+    try {
+      const s = await rejoinConversation(rejoinCode);
+      setToken(s.token);
+      setChat(c => ({ ...c, reference: s.reference }));
+      setRejoinOpen(false); setRejoinCode('');
+      await reload(s.token);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not rejoin the chat.');
+    } finally {
+      setBusy(false);
+    }
+  };
 
-  const lastCustomer = messages.map(m => m.sender).lastIndexOf('customer');
+  const closeChat = async () => {
+    if (!token) return;
+    setBusy(true);
+    try {
+      await fetch(`${API}/api/chat/${token}/close`, { method: 'POST' });
+      setConfirmClose(false);
+      await reload(token);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const newChat = () => {
+    clearChatSession();
+    setToken(null); setChat(emptyChat); setBotOptions([]); setInput('');
+    setAskDetails(false); setDetailsDone(false); setDetailName(''); setDetailContact(''); setError('');
+  };
+
+  const copyRef = async () => {
+    if (!chat.reference) return;
+    try {
+      await navigator.clipboard.writeText(chat.reference);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1800);
+    } catch { /* clipboard blocked */ }
+  };
+
+  if (!open) {
+    return (
+      <button type="button" className="cw-bubble" onClick={() => setOpen(true)} aria-label="Open chat">
+        <svg viewBox="0 0 24 24" width="26" height="26" aria-hidden="true"><path fill="currentColor" d="M4 4h16a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H8l-4 4V6a2 2 0 0 1 2-2Z" /></svg>
+      </button>
+    );
+  }
+
+  const hasChat = !!token;
+  const showDetailsCard = !chat.closed && (askDetails || (chat.handedOff && !chat.name && !detailsDone));
+  const statusText = chat.closed ? 'Chat closed' : chat.handedOff ? 'Connected to our team' : 'Assistant · instant answers';
+  const lastCustomer = chat.messages.map(m => m.sender).lastIndexOf('customer');
+  const transcriptUrl = token ? `${API}/api/chat/${token}/transcript` : '#';
 
   return (
-    <div style={panelStyle}>
-      <div style={headerStyle}>
-        <span>Chat with us</span>
-        <button onClick={() => setOpen(false)} style={closeBtnStyle}>—</button>
+    <div className="cw-panel" role="dialog" aria-label="Chat with WN Wrecker">
+      <div className="cw-header">
+        <div>
+          <strong>WN Wrecker</strong>
+          <span><i className={`cw-status-dot${chat.closed ? ' off' : chat.handedOff ? ' live' : ''}`} />{statusText}</span>
+        </div>
+        <button type="button" className="cw-icon" onClick={() => setOpen(false)} aria-label="Minimise chat">—</button>
       </div>
-      <div style={subBar}>
-        {handedOff ? <span style={{ color: '#059669' }}>● Connected to our team</span>
-          : <button onClick={requestHuman} style={humanBtn}>🙋 Talk to a human</button>}
-      </div>
-      <div style={messagesStyle}>
-        {messages.length === 0 && (
-          <div>
-            <p style={{ color: '#888' }}>Hi! Ask us anything, or tap a question:</p>
-            <div style={chipRow}>{faqs.map((q, i) => <button key={i} onClick={() => send(q)} style={chipStyle}>{q}</button>)}</div>
+
+      {hasChat && (
+        <div className="cw-bar">
+          {chat.reference && (
+            <button type="button" className="cw-ref" onClick={() => void copyRef()} title="Copy your reference code">
+              Ref <b>{chat.reference}</b> <span>{copied ? 'Copied ✓' : 'Copy'}</span>
+            </button>
+          )}
+          <div className="cw-bar-actions">
+            <a className="cw-link" href={transcriptUrl} target="_blank" rel="noreferrer">Download chat</a>
+            {!chat.closed && <button type="button" className="cw-link danger" onClick={() => setConfirmClose(true)}>Close chat</button>}
           </div>
-        )}
-        {messages.map((m, i) => (
-          <div key={i} style={{ textAlign: m.sender === 'customer' ? 'right' : 'left' }}>
-            {m.sender !== 'customer' && <div style={senderLabel}>{m.sender === 'bot' ? 'Bot' : 'WN Wrecker'}</div>}
-            <span style={msgStyle(m.sender)}>{m.text}</span>
-            <div style={metaStyle(m.sender)}>
-              {fmtTime(m.sentAt)}{m.sender === 'customer' && i === lastCustomer ? ' · Delivered' : ''}
-            </div>
-          </div>
-        ))}
-        {botOptions.length > 0 && <div style={chipRow}>{botOptions.map((q, i) => <button key={i} onClick={() => send(q)} style={chipStyle}>{q}</button>)}</div>}
-        <div ref={bottomRef} />
-      </div>
-      {!handedOff && (
-        <div style={suggestBar}>
-          <button onClick={() => setShowSuggestions(s => !s)} style={suggestToggleBtn}>💡 Suggested questions {showSuggestions ? '▾' : '▸'}</button>
-          {showSuggestions && <div style={{ ...chipRow, marginTop: 6 }}>{faqs.map((q, i) => <button key={i} onClick={() => send(q)} style={chipStyle}>{q}</button>)}</div>}
         </div>
       )}
-      <div style={inputRowStyle}>
-        <input value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') send(); }} placeholder="Type a message..." style={inputStyle} />
-        <button onClick={() => send()} style={sendBtnStyle}>Send</button>
+
+      <div className="cw-messages">
+        {!hasChat && (
+          <div className="cw-welcome">
+            <p className="cw-hello">Hi there 👋 Ask us anything about parts, or tap a question:</p>
+            <div className="cw-chips">{faqs.map((q, i) => <button type="button" key={i} onClick={() => void send(q)} className="cw-chip">{q}</button>)}</div>
+            <button type="button" className="cw-person" onClick={() => setAskDetails(true)}>🙋 Talk to a person</button>
+
+            <div className="cw-rejoin">
+              {!rejoinOpen ? (
+                <button type="button" className="cw-link" onClick={() => setRejoinOpen(true)}>Have a reference code? Rejoin your chat</button>
+              ) : (
+                <form onSubmit={e => void rejoin(e)}>
+                  <label htmlFor="cw-code">Reference code</label>
+                  <div className="cw-row">
+                    <input id="cw-code" className="cw-input" placeholder="e.g. WN-7F3K2" value={rejoinCode} onChange={e => setRejoinCode(e.target.value)} autoFocus />
+                    <button type="submit" className="cw-btn" disabled={busy || !rejoinCode.trim()}>Rejoin</button>
+                  </div>
+                </form>
+              )}
+            </div>
+          </div>
+        )}
+
+        {hasChat && chat.reference && (
+          <div className="cw-note">Save your reference <b>{chat.reference}</b> — you can use it to come back to this chat after closing the tab.</div>
+        )}
+
+        {chat.messages.map((m, i) => {
+          if (m.sender === 'system') return <div key={m.id ?? i} className="cw-system">{m.text}</div>;
+          const mine = m.sender === 'customer';
+          return (
+            <div key={m.id ?? `t${i}`} className={`cw-msg ${mine ? 'mine' : m.sender}`}>
+              {!mine && <div className="cw-label">{m.sender === 'bot' ? 'Assistant' : 'WN Wrecker'}</div>}
+              {m.kind === 'invoice' && m.invoice ? (
+                <div className="cw-invoice">
+                  <div className="cw-invoice-top">
+                    <span className="cw-invoice-icon">🧾</span>
+                    <div>
+                      <strong>Invoice {m.invoice.number}</strong>
+                      {m.invoice.title && <span>{m.invoice.title}</span>}
+                    </div>
+                  </div>
+                  <div className="cw-invoice-total">
+                    {money(Number(m.invoice.total))} <small>incl. GST</small>
+                    <em className={`cw-inv-status ${m.invoice.status.toLowerCase()}`}>{m.invoice.status}</em>
+                  </div>
+                  <div className="cw-row">
+                    <a className="cw-btn ghost" href={invoiceUrl(m.invoice.publicToken)} target="_blank" rel="noreferrer">View</a>
+                    <a className="cw-btn" href={invoiceUrl(m.invoice.publicToken, true)} target="_blank" rel="noreferrer">Download</a>
+                  </div>
+                </div>
+              ) : (
+                <span className="cw-bubble-text">{m.text}</span>
+              )}
+              <div className="cw-meta">{fmtTime(m.sentAt)}{mine && i === lastCustomer ? ' · Delivered' : ''}</div>
+            </div>
+          );
+        })}
+
+        {botOptions.length > 0 && !chat.closed && (
+          <div className="cw-chips">{botOptions.map((q, i) => <button type="button" key={i} onClick={() => void send(q)} className="cw-chip">{q}</button>)}</div>
+        )}
+
+        {showDetailsCard && (
+          <form className="cw-card" onSubmit={e => void connectToPerson(e)}>
+            <strong>{chat.handedOff ? 'Who are we chatting with?' : 'Connect to our team'}</strong>
+            <p>Optional — leave your name and an email or phone so we can send your quote or invoice.</p>
+            <input className="cw-input" placeholder="Your name" value={detailName} onChange={e => setDetailName(e.target.value)} />
+            <input className="cw-input" placeholder="Email or phone" value={detailContact} onChange={e => setDetailContact(e.target.value)} />
+            <div className="cw-row">
+              <button type="submit" className="cw-btn" disabled={busy}>{chat.handedOff ? 'Save' : 'Connect me'}</button>
+              <button
+                type="button"
+                className="cw-btn ghost"
+                disabled={busy}
+                onClick={() => {
+                  if (chat.handedOff) { setAskDetails(false); setDetailsDone(true); }
+                  else { setDetailName(''); setDetailContact(''); void connectToPerson(); }
+                }}
+              >
+                {chat.handedOff ? 'Skip' : 'Skip & connect'}
+              </button>
+            </div>
+          </form>
+        )}
+
+        {error && <div className="cw-error">{error}</div>}
+        <div ref={bottomRef} />
       </div>
+
+      {chat.closed ? (
+        <div className="cw-closed">
+          <strong>This chat is closed</strong>
+          <span>{chat.closedBy === 'customer' ? 'You closed this chat.' : 'Our team closed this chat.'} Closed chats are deleted after 7 days — download a copy to keep it.</span>
+          <div className="cw-row">
+            <a className="cw-btn" href={transcriptUrl} target="_blank" rel="noreferrer">Download chat (PDF)</a>
+            <button type="button" className="cw-btn ghost" onClick={newChat}>Start a new chat</button>
+          </div>
+        </div>
+      ) : (
+        <>
+          {hasChat && !chat.handedOff && (
+            <div className="cw-suggest">
+              <button type="button" onClick={() => setShowSuggestions(s => !s)} className="cw-link">💡 Suggested questions {showSuggestions ? '▾' : '▸'}</button>
+              {!askDetails && <button type="button" onClick={() => setAskDetails(true)} className="cw-link">🙋 Talk to a person</button>}
+              {showSuggestions && <div className="cw-chips" style={{ marginTop: 6, width: '100%' }}>{faqs.map((q, i) => <button type="button" key={i} onClick={() => void send(q)} className="cw-chip">{q}</button>)}</div>}
+            </div>
+          )}
+          <form className="cw-compose" onSubmit={e => { e.preventDefault(); void send(); }}>
+            <input value={input} onChange={e => setInput(e.target.value)} placeholder="Type a message…" className="cw-input" aria-label="Message" />
+            <button type="submit" className="cw-btn" disabled={!input.trim()}>Send</button>
+          </form>
+        </>
+      )}
+
+      {confirmClose && (
+        <div className="cw-overlay">
+          <div className="cw-confirm">
+            <strong>Close this chat?</strong>
+            <p>You won't be able to send more messages in it. You can still download a copy of the whole chat afterwards.</p>
+            <div className="cw-row">
+              <button type="button" className="cw-btn ghost" onClick={() => setConfirmClose(false)} disabled={busy}>Cancel</button>
+              <button type="button" className="cw-btn danger" onClick={() => void closeChat()} disabled={busy}>{busy ? 'Closing…' : 'Close chat'}</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
-
-const bubbleStyle: CSSProperties = { position: 'fixed', bottom: 20, right: 20, width: 60, height: 60, borderRadius: '50%', border: 'none', background: '#0f172a', color: 'white', fontSize: 26, cursor: 'pointer', boxShadow: '0 4px 12px rgba(0,0,0,0.25)' };
-const panelStyle: CSSProperties = { position: 'fixed', bottom: 20, right: 20, width: 340, height: 490, background: 'white', color: '#111', borderRadius: 12, boxShadow: '0 8px 24px rgba(0,0,0,0.25)', display: 'flex', flexDirection: 'column', overflow: 'hidden', fontFamily: 'system-ui, sans-serif' };
-const headerStyle: CSSProperties = { background: '#0f172a', color: 'white', padding: '12px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontWeight: 600 };
-const subBar: CSSProperties = { padding: '6px 12px', borderBottom: '1px solid #eee', fontSize: 12 };
-const humanBtn: CSSProperties = { border: '1px solid #f59e0b', background: 'white', color: '#b45309', borderRadius: 12, padding: '3px 10px', fontSize: 12, cursor: 'pointer' };
-const closeBtnStyle: CSSProperties = { background: 'none', border: 'none', color: 'white', fontSize: 20, cursor: 'pointer' };
-const messagesStyle: CSSProperties = { flex: 1, padding: 12, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 10 };
-const chipRow: CSSProperties = { display: 'flex', flexWrap: 'wrap', gap: 6 };
-const suggestBar: CSSProperties = { padding: '6px 10px', borderTop: '1px solid #eee' };
-const suggestToggleBtn: CSSProperties = { border: 'none', background: 'transparent', color: '#b45309', cursor: 'pointer', fontSize: 13, fontWeight: 600, padding: 0 };
-const inputRowStyle: CSSProperties = { display: 'flex', borderTop: '1px solid #eee', padding: 8, gap: 8, alignItems: 'center' };
-const inputStyle: CSSProperties = { flex: 1, padding: '8px 10px', border: '1px solid #ccc', borderRadius: 6, fontSize: 14 };
-const sendBtnStyle: CSSProperties = { background: '#f59e0b', color: '#1a1300', border: 'none', borderRadius: 6, padding: '8px 14px', cursor: 'pointer', fontWeight: 600 };
-const chipStyle: CSSProperties = { border: '1px solid #f59e0b', background: 'white', color: '#b45309', borderRadius: 14, padding: '4px 10px', fontSize: 12, cursor: 'pointer' };
-const senderLabel: CSSProperties = { fontSize: 11, color: '#7c3aed', marginBottom: 2 };
-const metaStyle = (sender: string): CSSProperties => ({ fontSize: 10, color: '#94a3b8', marginTop: 2, textAlign: sender === 'customer' ? 'right' : 'left' });
-const msgStyle = (sender: string): CSSProperties => ({ display: 'inline-block', padding: '8px 12px', borderRadius: 12, whiteSpace: 'pre-wrap', background: sender === 'customer' ? '#0f172a' : sender === 'bot' ? '#ede9fe' : '#e5e7eb', color: sender === 'customer' ? 'white' : '#111', maxWidth: '78%', textAlign: 'left', fontSize: 14 });
