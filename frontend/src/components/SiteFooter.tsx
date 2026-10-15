@@ -1,4 +1,5 @@
 import { Link } from "react-router-dom";
+import { hasEmail, phoneHref, useBusiness } from "../lib/business";
 
 const footerStyles = `
   .wn-site-footer {
@@ -85,8 +86,8 @@ const footerStyles = `
 
 export default function SiteFooter() {
   const currentYear = new Date().getFullYear();
-  const enquiryEmail = import.meta.env.VITE_ENQUIRY_EMAIL || "parts@wnwrecker.com.au";
-  const phoneNumber = (import.meta.env.VITE_PHONE_NUMBER || "").trim();
+  const business = useBusiness();   // name, email, phone, hours come from appsettings.json → "Business"
+  const hoursLines = business.hours.split("·").map(h => h.trim()).filter(Boolean);
 
   return (
     <>
@@ -97,7 +98,7 @@ export default function SiteFooter() {
             <p>Need help finding the right part?</p>
             <h2 id="wn-footer-help-title">Give us the vehicle details—we’ll do the searching.</h2>
           </div>
-          <Link to="/contact">Request a part</Link>
+          <Link to="/contact#request">Request a part</Link>
         </section>
 
         <section className="wn-footer-benefits" aria-label="Why choose WN Wrecker">
@@ -128,18 +129,21 @@ export default function SiteFooter() {
             <ul>
               <li><Link to="/about">About us</Link></li>
               <li><Link to="/contact">Contact the team</Link></li>
-              <li><Link to="/contact">Request a part</Link></li>
+              <li><Link to="/contact#request">Request a part</Link></li>
             </ul>
           </nav>
 
           <div className="wn-footer-column">
             <h3>Contact and hours</h3>
             <ul>
-              <li><a className="wn-footer-email" href={`mailto:${enquiryEmail}`}>{enquiryEmail}</a></li>
-              {phoneNumber ? <li><a href={`tel:${phoneNumber.replace(/\s/g, "")}`}>{phoneNumber}</a></li> : <li><Link to="/contact">Contact form</Link></li>}
-              <li>Monday–Friday: 8am–5pm</li>
-              <li>Saturday: 9am–1pm</li>
-              <li>Sunday: Closed</li>
+              {hasEmail(business.email)
+                ? <li><a className="wn-footer-email" href={`mailto:${business.email}`}>{business.email}</a></li>
+                : business.email && <li>{business.email}</li>}
+              {phoneHref(business.phone)
+                ? <li><a href={phoneHref(business.phone)}>{business.phone}</a></li>
+                : business.phone && <li>{business.phone}</li>}
+              <li><Link to="/contact#request">Request a part</Link></li>
+              {hoursLines.map(line => <li key={line}>{line}</li>)}
             </ul>
           </div>
         </div>
@@ -149,7 +153,7 @@ export default function SiteFooter() {
         </p>
 
         <div className="wn-footer-bottom">
-          <p>© {currentYear} WN Wrecker. All rights reserved.</p>
+          <p>© {currentYear} {business.name}. All rights reserved.</p>
           <p>Part compatibility and condition should be confirmed with our team before purchase. Product availability may change without notice.</p>
         </div>
       </footer>

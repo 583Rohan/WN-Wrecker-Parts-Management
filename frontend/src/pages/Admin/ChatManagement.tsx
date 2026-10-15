@@ -2,12 +2,13 @@ import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent }
 import type { Part } from '../../lib/types';
 import { API, authFetch, fmtDate, money, useToast } from '../../lib/admin';
 import {
-  BUSINESS_NAME, downloadAuthed, fetchInvoices, fetchParts, invoiceLink, isEmail, readError, toIso,
+  downloadAuthed, fetchInvoices, fetchParts, invoiceLink, isEmail, readError, toIso,
   type Invoice,
 } from '../../lib/invoices';
 import { ConfirmDialog, Modal, Toast } from '../../components/AdminUI';
 import InvoiceEditor from '../../components/InvoiceEditor';
 import SharePanel from '../../components/SharePanel';
+import { useBusiness } from '../../lib/business';
 import { startPolling } from '../../lib/poll';
 import '../../styles/admin.css';
 
@@ -83,6 +84,7 @@ const pingNav = () => window.dispatchEvent(new Event('wn-chats-changed'));
 /* ================================ page ================================ */
 export default function ChatManagement() {
   const { toast, notify } = useToast();
+  const { name: businessName } = useBusiness();
   const [chats, setChats] = useState<ChatSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<Tab>('active');
@@ -550,10 +552,10 @@ export default function ChatManagement() {
           <SharePanel
             link={transcriptLink}
             title={`Chat transcript ${current.reference ?? ''}`}
-            message={`Hi ${current.customerName?.trim() || 'there'}, here's a copy of our chat${current.reference ? ` (reference ${current.reference})` : ''} with ${BUSINESS_NAME}.`}
+            message={`Hi ${current.customerName?.trim() || 'there'}, here's a copy of our chat${current.reference ? ` (reference ${current.reference})` : ''} with ${businessName}.`}
             emailTo={isEmail(current.customerContact) ? current.customerContact!.trim() : null}
-            emailSubject={`Your chat with ${BUSINESS_NAME}${current.reference ? ` — ${current.reference}` : ''}`}
-            signOff={BUSINESS_NAME}
+            emailSubject={`Your chat with ${businessName}${current.reference ? ` — ${current.reference}` : ''}`}
+            signOff={businessName}
             onDownload={() => downloadAuthed(`${API}/api/admin/chats/${current.id}/transcript`, `Chat-${current.reference ?? current.id}.pdf`)}
             notify={notify}
           />

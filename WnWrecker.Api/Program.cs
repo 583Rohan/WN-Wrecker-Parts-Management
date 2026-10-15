@@ -66,6 +66,9 @@ builder.Services.AddCors(options =>
 
 var app = builder.Build();
 
+// the chat bot's answers use the business details from appsettings.json → "Business"
+WnWrecker.Api.Services.FaqBot.UseBusinessDetails(app.Configuration.GetSection("Business"));
+
 // Enable Cors for Frontend
 app.UseCors("Frontend");
 

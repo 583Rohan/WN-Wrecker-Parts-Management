@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { clearChatSession, getChatSession, rejoinConversation, startConversation } from '../lib/chat';
 import { startPolling } from '../lib/poll';
+import { useBusiness } from '../lib/business';
 import '../styles/chat-widget.css';
 
 const API = import.meta.env.VITE_API_URL;
@@ -32,6 +33,7 @@ const invoiceUrl = (token: string | null, download = false) =>
   token ? `${API}/api/invoices/p/${token}/pdf${download ? '?download=true' : ''}` : '#';
 
 export default function ChatWidget() {
+  const { name: businessName } = useBusiness();
   const [open, setOpen] = useState(false);
   const [token, setToken] = useState<string | null>(() => getChatSession().token);
   const [chat, setChat] = useState<ChatData>(() => ({ ...emptyChat, reference: getChatSession().reference }));
@@ -224,10 +226,10 @@ export default function ChatWidget() {
   const transcriptUrl = token ? `${API}/api/chat/${token}/transcript` : '#';
 
   return (
-    <div className="cw-panel" role="dialog" aria-label="Chat with WN Wrecker">
+    <div className="cw-panel" role="dialog" aria-label={`Chat with ${businessName}`}>
       <div className="cw-header">
         <div>
-          <strong>WN Wrecker</strong>
+          <strong>{businessName}</strong>
           <span><i className={`cw-status-dot${chat.closed ? ' off' : chat.handedOff ? ' live' : ''}`} />{statusText}</span>
         </div>
         <button type="button" className="cw-icon" onClick={() => setOpen(false)} aria-label="Minimise chat">—</button>
@@ -279,7 +281,7 @@ export default function ChatWidget() {
           const mine = m.sender === 'customer';
           return (
             <div key={m.id ?? `t${i}`} className={`cw-msg ${mine ? 'mine' : m.sender}`}>
-              {!mine && <div className="cw-label">{m.sender === 'bot' ? 'Assistant' : 'WN Wrecker'}</div>}
+              {!mine && <div className="cw-label">{m.sender === 'bot' ? 'Assistant' : businessName}</div>}
               {m.kind === 'invoice' && m.invoice ? (
                 <div className="cw-invoice">
                   <div className="cw-invoice-top">

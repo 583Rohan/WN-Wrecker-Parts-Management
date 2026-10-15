@@ -14,18 +14,13 @@ const timings: Array<[Phase, number]> = [
   ["reveal", 5400],
 ];
 
-const carMakes = [
-  { name: "MG", short: "MG", image: "/brands/mg.png" },
-  { name: "Lexus", short: "LX", image: "/brands/lexus.png" },
-  { name: "BMW", short: "BMW", image: "/brands/bmw.png" },
-  { name: "Audi", short: "AU", image: "/brands/audi.png" },
-  { name: "Mercedes", short: "MB", image: "/brands/mercedes.png" },
-  { name: "Dodge", short: "DG", image: "/brands/dodge.png" },
-  { name: "Genesis", short: "GN", image: "/brands/genesis.png" },
-  { name: "Subaru", short: "SB", image: "/brands/subaru.png" },
-  { name: "Honda", short: "HN", image: "/brands/honda.png" },
-  { name: "Mazda", short: "MZ", image: "/brands/mazda.png" },
-] as const;
+// logos we have in /public/brands — any other make in stock gets a text tile instead
+const brandLogos: Record<string, string> = {
+  mg: "/brands/mg.png", lexus: "/brands/lexus.png", bmw: "/brands/bmw.png", audi: "/brands/audi.png",
+  mercedes: "/brands/mercedes.png", "mercedes-benz": "/brands/mercedes.png", dodge: "/brands/dodge.png",
+  genesis: "/brands/genesis.png", subaru: "/brands/subaru.png", honda: "/brands/honda.png", mazda: "/brands/mazda.png",
+};
+const shortName = (make: string) => (make.length <= 3 ? make.toUpperCase() : make.slice(0, 2).toUpperCase());
 
 const styles = `
   .wn-homepage {
@@ -403,6 +398,7 @@ const styles = `
   .wn-makes-heading h2 { margin: 0; font-family: Impact, "Arial Narrow", sans-serif; font-size: clamp(2.2rem, 3.4vw, 3.4rem); font-weight: 500; letter-spacing: 0.02em; text-transform: uppercase; }
   .wn-makes-heading span { display: block; margin-top: 11px; color: #697177; line-height: 1.55; }
   .wn-makes-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 14px; }
+  .wn-makes-empty { grid-column: 1 / -1; margin: 0; color: #9aa3ad; }
   .wn-make-card {
     width: 100%;
     min-height: 220px;
@@ -436,8 +432,8 @@ const styles = `
   .wn-make-card strong { color: #fff; font-family: Impact, "Arial Narrow", sans-serif; font-size: 1.75rem; font-weight: 500; letter-spacing: 0.035em; text-shadow: 0 2px 12px rgba(0,0,0,0.8); text-transform: uppercase; }
   .wn-make-card small { display: block; margin-top: 4px; color: #d5dadd; font-size: 0.7rem; }
   @media (max-width: 900px) {
-    .wn-hero { min-height: 980px; padding-top: 64px; grid-template-columns: 1fr; align-content: start; }
-    .wn-hero-copy { max-width: 620px; }
+    .wn-hero { min-height: 980px; padding-top: 64px; grid-template-columns: minmax(0, 1fr); align-content: start; }
+    .wn-hero-copy { max-width: min(620px, 100%); min-width: 0; }
     .wn-hero h1 { font-size: clamp(4.8rem, 14vw, 7.5rem); }
     .wn-car-stage { width: 100vw; height: 520px; min-height: 0; margin: -20px 0 0 -6vw; }
     .wn-car-intact { width: min(65vw, 560px); }
@@ -496,13 +492,16 @@ function ArrowIcon() {
   );
 }
 
+const prefersReducedMotion = () =>
+  typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
 function HeroSequence() {
-  const [phase, setPhase] = useState<Phase>("arrival");
+  // people who turn off animations see the finished hero straight away
+  const [phase, setPhase] = useState<Phase>(() => (prefersReducedMotion() ? "reveal" : "arrival"));
   const stageRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    if (reduced) { setPhase("reveal"); return; }
+    if (prefersReducedMotion()) return;
     const timers = timings.slice(1).map(([nextPhase, delay]) =>
       window.setTimeout(() => setPhase(nextPhase), delay));
     return () => timers.forEach(window.clearTimeout);
@@ -568,22 +567,22 @@ function HeroSequence() {
 
 export default function Home() {
   const [parts, setParts] = useState<Part[]>([]);
+  const [makes, setMakes] = useState<string[]>([]);
   const [selectedMake, setSelectedMake] = useState<string | null>(null);
   const makeNavigationTimer = useRef<number | null>(null);
   const navigate = useNavigate();
 
   useEffect(() => {
-    fetch(`${API}/api/parts`)
+    // only parts customers can buy, and only makes we actually have in stock
+    fetch(`${API}/api/parts?inStock=true`)
       .then(response => (response.ok ? response.json() : []))
-      .then((data: Part[]) => {
-        const availableParts = data.filter(
-          part => part.status?.trim().toLowerCase() === 'in stock'
-        );
-        setParts(availableParts);
-      })
+      .then((data: Part[]) => setParts(data))
       .catch(() => setParts([]));
+    fetch(`${API}/api/vehicles/makes`)
+      .then(response => (response.ok ? response.json() : []))
+      .then((data: string[]) => setMakes(data))
+      .catch(() => setMakes([]));
   }, []);
-
   useEffect(() => () => {
     if (makeNavigationTimer.current !== null) window.clearTimeout(makeNavigationTimer.current);
   }, []);
@@ -592,7 +591,7 @@ export default function Home() {
     setSelectedMake(make);
     if (makeNavigationTimer.current !== null) window.clearTimeout(makeNavigationTimer.current);
     makeNavigationTimer.current = window.setTimeout(() => {
-      navigate("/finder");
+      navigate(`/parts?make=${encodeURIComponent(make)}`);   // open the shop filtered to this make
     }, 280);
   }
 
@@ -641,7 +640,7 @@ export default function Home() {
               <span>Can’t see your part?</span>
               <h3>Let us find it</h3>
               <p>Tell us your vehicle details and the part you need. Our team will check current and upcoming stock.</p>
-              <Link to="/contact">Send a parts request</Link>
+              <Link to="/contact#request">Send a parts request</Link>
             </aside>
           </div>
         </section>
@@ -649,25 +648,29 @@ export default function Home() {
           <div className="wn-makes-heading">
             <p>Browse vehicles</p>
             <h2 id="wn-makes-title">Search by make</h2>
-            <span>Select your vehicle manufacturer to browse matching parts in the shop.</span>
+            <span>Pick a manufacturer to see the parts we have in stock for it.</span>
           </div>
           <div className="wn-makes-grid">
-            {carMakes.map(make => (
-              <button
-                className={`wn-make-card${selectedMake === make.name ? " is-selected" : ""}`}
-                key={make.name}
-                type="button"
-                onClick={() => selectMake(make.name)}
-                aria-label={`Shop ${make.name} parts`}
-                aria-pressed={selectedMake === make.name}
-              >
-                <span className="wn-make-image" aria-hidden="true">
-                  <span>{make.short}</span>
-                  <img src={make.image} alt="" onError={event => { event.currentTarget.style.display = "none"; }} />
-                </span>
-                <span className="wn-make-copy"><strong>{make.name}</strong><small>Shop parts</small></span>
-              </button>
-            ))}
+            {makes.length === 0 && <p className="wn-makes-empty">Makes will appear here as soon as parts are listed.</p>}
+            {makes.map(make => {
+              const logo = brandLogos[make.trim().toLowerCase()];
+              return (
+                <button
+                  className={`wn-make-card${selectedMake === make ? " is-selected" : ""}`}
+                  key={make}
+                  type="button"
+                  onClick={() => selectMake(make)}
+                  aria-label={`Shop ${make} parts`}
+                  aria-pressed={selectedMake === make}
+                >
+                  <span className="wn-make-image" aria-hidden="true">
+                    <span>{shortName(make)}</span>
+                    {logo && <img src={logo} alt="" onError={event => { event.currentTarget.style.display = "none"; }} />}
+                  </span>
+                  <span className="wn-make-copy"><strong>{make}</strong><small>Shop parts</small></span>
+                </button>
+              );
+            })}
           </div>
         </section>
       </div>
