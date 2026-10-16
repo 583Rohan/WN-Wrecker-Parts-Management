@@ -55,7 +55,7 @@ namespace WnWrecker.Api.Services
             if (_cloudinary == null || string.IsNullOrWhiteSpace(photoUrl)) return;
             var publicId = PublicIdFromUrl(photoUrl);
             if (publicId == null) return;
-            await _cloudinary.DestroyAsync(new DeletionParams(publicId));
+            await _cloudinary.DestroyAsync(new DeletionParams(publicId) { Invalidate = true });   // also clears Cloudinary's cached copy
         }
 
         // https://res.cloudinary.com/<cloud>/image/upload/v123/wnwrecker/parts/abc.jpg  ->  wnwrecker/parts/abc

@@ -61,6 +61,7 @@ builder.Services.AddCors(options =>
 builder.Services.Configure<ForwardedHeadersOptions>(options =>
 {
     options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+    options.ForwardLimit = null;   // Render passes requests through more than one proxy; the visitor's address is the first one
 #pragma warning disable ASPDEPR005
     options.KnownNetworks.Clear();
 #pragma warning restore ASPDEPR005
