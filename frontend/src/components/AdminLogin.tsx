@@ -1,12 +1,14 @@
 import { useState, type FormEvent } from 'react';
 import { Link } from 'react-router-dom';
 import '../styles/admin.css';
+import { usePageTitle } from '../lib/usePageTitle';
 
 const API = import.meta.env.VITE_API_URL;
 export const SESSION_EXPIRED_KEY = 'wnwrecker_admin_expired';
 
 // Admin sign-in screen (shown by AdminLayout when nobody is logged in)
 export default function AdminLogin({ onLogin }: { onLogin: (token: string) => void }) {
+  usePageTitle('Admin login');
   const [username, setUsername] = useState('admin');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);

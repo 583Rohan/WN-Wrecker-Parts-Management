@@ -2,8 +2,10 @@ import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { useLocation } from 'react-router-dom';
 import { hasEmail, phoneHref, useBusiness } from '../lib/business';
 import { ensureConversation, openChat, requestHuman, saveChatDetails, sendChatMessage } from '../lib/chat';
+import { usePageTitle } from '../lib/usePageTitle';
 
 export default function Contact() {
+  usePageTitle('Contact');
   const business = useBusiness();   // all details come from appsettings.json → "Business"
   const location = useLocation();
   const requestRef = useRef<HTMLElement>(null);
@@ -53,55 +55,65 @@ export default function Contact() {
   const hoursLines = business.hours.split('·').map(h => h.trim()).filter(Boolean);
 
   return (
-    <div className="section">
-      <div className="container" style={{ maxWidth: 760 }}>
-        <h2>Contact us</h2>
-        <div className="card card-body" style={{ marginBottom: 20 }}>
-          {business.address && <p><strong>Address:</strong> {business.address}</p>}
-          {business.phone && <p><strong>Phone:</strong> {phoneHref(business.phone) ? <a href={phoneHref(business.phone)}>{business.phone}</a> : business.phone}</p>}
-          {business.email && <p><strong>Email:</strong> {hasEmail(business.email) ? <a href={`mailto:${business.email}`}>{business.email}</a> : business.email}</p>}
-          {hoursLines.length > 0 && <p><strong>Hours:</strong> {hoursLines.join(' · ')}</p>}
-          {business.abn && <p className="muted" style={{ fontSize: 13 }}>ABN {business.abn}</p>}
+    <>
+      <section className="page-hero">
+        <div className="page-hero-inner">
+          <h1>Talk to the team</h1>
+          <p>Questions about a part, pickup or delivery? The chat is the fastest way to reach us.</p>
         </div>
-        <p className="muted">Have a question about a part? The fastest way to reach us is the chat.</p>
-        <button className="btn" onClick={openChat}>Message us</button>
+      </section>
 
-        <section id="request" ref={requestRef} className="card card-body" style={{ marginTop: 32, scrollMarginTop: 80 }}>
-          <h3 style={{ marginTop: 0 }}>Request a part</h3>
-          <p className="muted" style={{ marginTop: 0 }}>Can't find what you need? Tell us the part and your vehicle — we'll check current and upcoming stock and reply in the chat.</p>
+      <div className="page-body">
+        <div className="contact-grid">
+          <aside className="panel accent">
+            <h2 className="section-title" style={{ fontSize: '1.4rem' }}>Find us</h2>
+            <ul className="contact-list">
+              {business.address && <li><span>Address</span>{business.address}</li>}
+              {business.phone && <li><span>Phone</span>{phoneHref(business.phone) ? <a href={phoneHref(business.phone)}>{business.phone}</a> : business.phone}</li>}
+              {business.email && <li><span>Email</span>{hasEmail(business.email) ? <a href={`mailto:${business.email}`}>{business.email}</a> : business.email}</li>}
+              {hoursLines.length > 0 && <li><span>Hours</span>{hoursLines.map(line => <div key={line}>{line}</div>)}</li>}
+              {business.abn && <li><span>ABN</span>{business.abn}</li>}
+            </ul>
+            <button className="btn" style={{ marginTop: 20, width: '100%' }} onClick={openChat}>Message us</button>
+          </aside>
 
-          {result === 'sent' && <div className="notice ok">Request sent! Our team will reply in the chat window. Keep your reference code to come back to it later.</div>}
-          {result === 'error' && <div className="notice err">Couldn't send your request. Please try again, or use the chat.</div>}
+          <section id="request" ref={requestRef} className="panel" style={{ scrollMarginTop: 80 }}>
+            <h2 className="section-title" style={{ fontSize: '1.4rem', marginBottom: 6 }}>Request a part</h2>
+            <p className="muted" style={{ marginTop: 0, lineHeight: 1.6 }}>Can't find what you need? Tell us the part and your vehicle — we'll check current and upcoming stock and reply in the chat.</p>
 
-          <form className="request-form" onSubmit={e => void submit(e)} noValidate>
-            <div className="field wide">
-              <label className="label" htmlFor="req-part">Part you need *</label>
-              <input id="req-part" className="input" placeholder="e.g. Left headlight" value={part} onChange={e => setPart(e.target.value)} />
-              {tried && !part.trim() && <small style={{ color: '#b91c1c' }}>Tell us which part you need.</small>}
-            </div>
-            <div className="field wide">
-              <label className="label" htmlFor="req-vehicle">Vehicle (make, model, year)</label>
-              <input id="req-vehicle" className="input" placeholder="e.g. Toyota Corolla 2015" value={vehicle} onChange={e => setVehicle(e.target.value)} />
-            </div>
-            <div className="field">
-              <label className="label" htmlFor="req-name">Your name</label>
-              <input id="req-name" className="input" value={name} onChange={e => setName(e.target.value)} />
-            </div>
-            <div className="field">
-              <label className="label" htmlFor="req-contact">Email or phone *</label>
-              <input id="req-contact" className="input" placeholder="So we can get back to you" value={contact} onChange={e => setContact(e.target.value)} />
-              {tried && !contact.trim() && <small style={{ color: '#b91c1c' }}>Add an email or phone number.</small>}
-            </div>
-            <div className="field wide">
-              <label className="label" htmlFor="req-notes">Anything else?</label>
-              <textarea id="req-notes" className="input" rows={3} value={notes} onChange={e => setNotes(e.target.value)} />
-            </div>
-            <div className="wide">
-              <button className="btn" type="submit" disabled={sending}>{sending ? 'Sending…' : 'Send request'}</button>
-            </div>
-          </form>
-        </section>
+            {result === 'sent' && <div className="notice ok">Request sent! Our team will reply in the chat window. Keep your reference code to come back to it later.</div>}
+            {result === 'error' && <div className="notice err">Couldn't send your request. Please try again, or use the chat.</div>}
+
+            <form className="request-form" onSubmit={e => void submit(e)} noValidate>
+              <div className="field wide">
+                <label className="label" htmlFor="req-part">Part you need *</label>
+                <input id="req-part" className="input" placeholder="e.g. Left headlight" value={part} onChange={e => setPart(e.target.value)} />
+                {tried && !part.trim() && <small className="field-error">Tell us which part you need.</small>}
+              </div>
+              <div className="field wide">
+                <label className="label" htmlFor="req-vehicle">Vehicle (make, model, year)</label>
+                <input id="req-vehicle" className="input" placeholder="e.g. Toyota Corolla 2015" value={vehicle} onChange={e => setVehicle(e.target.value)} />
+              </div>
+              <div className="field">
+                <label className="label" htmlFor="req-name">Your name</label>
+                <input id="req-name" className="input" value={name} onChange={e => setName(e.target.value)} />
+              </div>
+              <div className="field">
+                <label className="label" htmlFor="req-contact">Email or phone *</label>
+                <input id="req-contact" className="input" placeholder="So we can get back to you" value={contact} onChange={e => setContact(e.target.value)} />
+                {tried && !contact.trim() && <small className="field-error">Add an email or phone number.</small>}
+              </div>
+              <div className="field wide">
+                <label className="label" htmlFor="req-notes">Anything else?</label>
+                <textarea id="req-notes" className="input" rows={3} value={notes} onChange={e => setNotes(e.target.value)} />
+              </div>
+              <div className="wide">
+                <button className="btn" type="submit" disabled={sending}>{sending ? 'Sending…' : 'Send request'}</button>
+              </div>
+            </form>
+          </section>
+        </div>
       </div>
-    </div>
+    </>
   );
 }

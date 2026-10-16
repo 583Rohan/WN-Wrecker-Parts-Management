@@ -60,6 +60,7 @@ builder.Services.AddCors(options =>
         policy.WithOrigins("http://localhost:5173")   // the Vite dev server
               .AllowAnyHeader()
               .AllowAnyMethod()
+              .WithExposedHeaders("X-Total-Count")           // lets the shop read how many parts match
               .SetPreflightMaxAge(TimeSpan.FromHours(1)));   // browser remembers the CORS check for an hour
 });
 

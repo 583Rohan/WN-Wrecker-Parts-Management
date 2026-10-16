@@ -1,19 +1,20 @@
 import { Link } from "react-router-dom";
 import { hasEmail, phoneHref, useBusiness } from "../lib/business";
+import { CarIcon, ChatIcon, CheckIcon, RecycleIcon } from "./Icons";
 
 const footerStyles = `
   .wn-site-footer {
-    --wn-footer-navy: #0b1628;
-    --wn-footer-deep: #07101d;
+    --wn-footer-navy: var(--c-navy);
+    --wn-footer-deep: var(--c-navy-deep);
     --wn-footer-ink: #f5f6f3;
     --wn-footer-muted: #9fa9b7;
-    --wn-footer-amber: #f5a313;
+    --wn-footer-amber: var(--c-amber);
     width: 100%;
     margin: 0;
     padding: 0;
     color: var(--wn-footer-ink);
     background: var(--wn-footer-deep);
-    font-family: Inter, Arial, sans-serif;
+    font-family: var(--font-body);
   }
   .wn-site-footer * { box-sizing: border-box; }
   .wn-site-footer a { color: inherit; text-decoration: none; }
@@ -26,9 +27,8 @@ const footerStyles = `
     color: #111;
     background: var(--wn-footer-amber);
   }
-  .wn-footer-help p { margin: 0 0 5px; font-size: 0.7rem; font-weight: 900; letter-spacing: 0.16em; text-transform: uppercase; }
-  .wn-footer-help h2 { margin: 0; font-family: Impact, "Arial Narrow", sans-serif; font-size: clamp(1.8rem, 3vw, 2.8rem); font-weight: 500; line-height: 1; text-transform: uppercase; }
-  .wn-footer-help a { min-height: 48px; padding: 0 20px; display: inline-flex; align-items: center; white-space: nowrap; color: #fff; background: #101820; font-size: 0.8rem; font-weight: 800; transition: transform 180ms ease, background 180ms ease; }
+  .wn-footer-help h2 { margin: 0; font-family: var(--font-display); font-size: clamp(1.8rem, 3vw, 2.8rem); font-weight: 500; line-height: 1; text-transform: uppercase; }
+  .wn-footer-help a { min-height: 48px; padding: 0 20px; display: inline-flex; align-items: center; white-space: nowrap; color: #fff; background: var(--c-navy-deep); font-size: 0.8rem; font-weight: 800; transition: transform 180ms ease, background 180ms ease; }
   .wn-footer-help a:hover { transform: translateY(-2px); background: #000; }
   .wn-footer-benefits {
     padding: 0 clamp(24px, 5vw, 92px);
@@ -40,6 +40,7 @@ const footerStyles = `
   .wn-footer-benefit { min-height: 92px; padding: 22px 24px; display: flex; align-items: center; gap: 13px; border-right: 1px solid rgba(255,255,255,0.09); }
   .wn-footer-benefit:first-child { padding-left: 0; }
   .wn-footer-benefit:last-child { border-right: 0; }
+  .wn-footer-benefit > span svg { width: 17px; height: 17px; }
   .wn-footer-benefit > span { width: 31px; height: 31px; flex: 0 0 auto; display: grid; place-items: center; color: #111; background: var(--wn-footer-amber); border-radius: 50%; font-size: 0.75rem; font-weight: 900; }
   .wn-footer-benefit div { display: grid; gap: 3px; }
   .wn-footer-benefit strong { font-size: 0.77rem; }
@@ -58,7 +59,7 @@ const footerStyles = `
   .wn-footer-brand > p { margin: 19px 0 25px; color: var(--wn-footer-muted); line-height: 1.65; }
   .wn-footer-recycle { display: inline-flex; align-items: center; gap: 9px; color: #d9dee5; font-size: 0.75rem; font-weight: 700; }
   .wn-footer-recycle span { color: var(--wn-footer-amber); font-size: 1.15rem; }
-  .wn-footer-column h3 { margin: 5px 0 19px; color: #fff; font-size: 0.75rem; letter-spacing: 0.15em; text-transform: uppercase; }
+  .wn-footer-column h3 { margin: 5px 0 16px; color: #fff; font-size: 0.92rem; font-weight: 700; }
   .wn-footer-column ul { margin: 0; padding: 0; display: grid; gap: 12px; list-style: none; }
   .wn-footer-column li, .wn-footer-column a { color: var(--wn-footer-muted); font-size: 0.8rem; line-height: 1.45; }
   .wn-footer-column a:hover { color: var(--wn-footer-amber); }
@@ -75,11 +76,14 @@ const footerStyles = `
   }
   @media (max-width: 620px) {
     .wn-footer-help { align-items: flex-start; flex-direction: column; }
-    .wn-footer-benefits { grid-template-columns: 1fr; padding: 0 20px; }
-    .wn-footer-benefit, .wn-footer-benefit:first-child { padding: 18px 0; border-right: 0; border-bottom: 1px solid rgba(255,255,255,0.09); }
-    .wn-footer-main { padding: 44px 20px; grid-template-columns: 1fr; gap: 34px; }
+    /* the four benefits sit two by two so they don't fill the screen */
+    .wn-footer-benefits { grid-template-columns: repeat(2, minmax(0, 1fr)); padding: 6px 20px; }
+    .wn-footer-benefit, .wn-footer-benefit:first-child { min-height: 0; padding: 14px 10px 14px 0; gap: 10px; align-items: flex-start; border-right: 0; }
+    .wn-footer-benefit > span { width: 26px; height: 26px; font-size: 0.65rem; }
+    .wn-footer-main { padding: 36px 20px; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 28px 20px; }
+    .wn-footer-brand, .wn-footer-main > .wn-footer-column:last-child { grid-column: 1 / -1; }   /* link lists sit side by side */
     .wn-footer-acknowledgement { margin: 0 20px; text-align: left; }
-    .wn-footer-bottom { padding: 22px 20px 28px; flex-direction: column; }
+    .wn-footer-bottom { padding: 22px 20px 88px; flex-direction: column; }   /* room for the chat button */
     .wn-footer-bottom p:last-child { text-align: left; }
   }
 `;
@@ -95,17 +99,16 @@ export default function SiteFooter() {
       <footer className="wn-site-footer">
         <section className="wn-footer-help" aria-labelledby="wn-footer-help-title">
           <div>
-            <p>Need help finding the right part?</p>
             <h2 id="wn-footer-help-title">Give us the vehicle details—we’ll do the searching.</h2>
           </div>
           <Link to="/contact#request">Request a part</Link>
         </section>
 
         <section className="wn-footer-benefits" aria-label="Why choose WN Wrecker">
-          <div className="wn-footer-benefit"><span>01</span><div><strong>Quality checked</strong><small>Parts inspected before listing</small></div></div>
-          <div className="wn-footer-benefit"><span>02</span><div><strong>Vehicle matching</strong><small>Help finding compatible parts</small></div></div>
-          <div className="wn-footer-benefit"><span>03</span><div><strong>Direct enquiries</strong><small>Speak with the parts team</small></div></div>
-          <div className="wn-footer-benefit"><span>04</span><div><strong>Reuse first</strong><small>Giving good parts another life</small></div></div>
+          <div className="wn-footer-benefit"><span><CheckIcon /></span><div><strong>Quality checked</strong><small>Parts inspected before listing</small></div></div>
+          <div className="wn-footer-benefit"><span><CarIcon /></span><div><strong>Vehicle matching</strong><small>Help finding compatible parts</small></div></div>
+          <div className="wn-footer-benefit"><span><ChatIcon /></span><div><strong>Direct enquiries</strong><small>Speak with the parts team</small></div></div>
+          <div className="wn-footer-benefit"><span><RecycleIcon /></span><div><strong>Reuse first</strong><small>Giving good parts another life</small></div></div>
         </section>
 
         <div className="wn-footer-main">
@@ -142,7 +145,6 @@ export default function SiteFooter() {
               {phoneHref(business.phone)
                 ? <li><a href={phoneHref(business.phone)}>{business.phone}</a></li>
                 : business.phone && <li>{business.phone}</li>}
-              <li><Link to="/contact#request">Request a part</Link></li>
               {hoursLines.map(line => <li key={line}>{line}</li>)}
             </ul>
           </div>

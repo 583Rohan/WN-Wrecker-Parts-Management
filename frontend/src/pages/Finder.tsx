@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import type { Part } from '../lib/types';
-import PartCard from '../components/PartCard';
+import PartCard, { PartCardSkeleton } from '../components/PartCard';
+import { usePageTitle } from '../lib/usePageTitle';
 
 const API = import.meta.env.VITE_API_URL;
 
@@ -9,6 +10,7 @@ const getJson = <T,>(url: string, fallback: T): Promise<T> =>
   fetch(url).then(r => (r.ok ? r.json() : fallback)).catch(() => fallback);
 
 export default function Finder() {
+  usePageTitle('Car Finder');
   const [searchParams] = useSearchParams();
   const [makes, setMakes] = useState<string[]>([]);
   const [models, setModels] = useState<string[]>([]);
@@ -50,38 +52,60 @@ export default function Finder() {
     setLoading(false);
   };
 
+  const vehicle = [make, model, year].filter(Boolean).join(' ');
+
   return (
-    <div>
-      <section className="hero" style={{ padding: '48px 0' }}>
-        <div className="container">
-          <h1 style={{ fontSize: 32 }}>Find parts for your car</h1>
-          <p>Pick your make, model and year.</p>
-          <div className="finder-controls">
-            <select className="input" aria-label="Make" value={make} onChange={e => chooseMake(e.target.value)}>
-              <option value="">Make</option>
-              {/* keep a pre-selected make visible even before the list loads */}
-              {make && !makes.includes(make) && <option value={make}>{make}</option>}
-              {makes.map(m => <option key={m} value={m}>{m}</option>)}
-            </select>
-            <select className="input" aria-label="Model" value={model} onChange={e => chooseModel(e.target.value)} disabled={!make}>
-              <option value="">Model (any)</option>
-              {models.map(m => <option key={m} value={m}>{m}</option>)}
-            </select>
-            <select className="input" aria-label="Year" value={year} onChange={e => setYear(e.target.value)} disabled={!model}>
-              <option value="">Year (any)</option>
-              {years.map(y => <option key={y} value={y}>{y}</option>)}
-            </select>
+    <>
+      <section className="page-hero">
+        <div className="page-hero-inner">
+          <h1>Parts for your car</h1>
+          <p>Pick your make, then narrow it down by model and year if you like.</p>
+
+          <div className="glass finder-controls" role="group" aria-label="Choose your vehicle">
+            <div>
+              <label className="label" htmlFor="finder-make">Make</label>
+              <select id="finder-make" className="input" value={make} onChange={e => chooseMake(e.target.value)}>
+                <option value="">Choose a make</option>
+                {/* keep a pre-selected make visible even before the list loads */}
+                {make && !makes.includes(make) && <option value={make}>{make}</option>}
+                {makes.map(m => <option key={m} value={m}>{m}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="label" htmlFor="finder-model">Model</label>
+              <select id="finder-model" className="input" value={model} onChange={e => chooseModel(e.target.value)} disabled={!make}>
+                <option value="">Any model</option>
+                {models.map(m => <option key={m} value={m}>{m}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="label" htmlFor="finder-year">Year</label>
+              <select id="finder-year" className="input" value={year} onChange={e => setYear(e.target.value)} disabled={!model}>
+                <option value="">Any year</option>
+                {years.map(y => <option key={y} value={y}>{y}</option>)}
+              </select>
+            </div>
             <button className="btn" onClick={() => void findParts()} disabled={!make || loading}>{loading ? 'Searching…' : 'Find parts'}</button>
           </div>
         </div>
       </section>
-      <section className="section">
-        <div className="container">
-          {parts === null ? <p className="muted">Choose your car above to see matching parts.</p>
-            : parts.length === 0 ? <p className="muted">No parts in stock for that selection right now. Message us and we'll check for you.</p>
-            : <><h2>Matching parts</h2><div className="grid">{parts.map(p => <PartCard key={p.id} part={p} />)}</div></>}
-        </div>
-      </section>
-    </div>
+
+      <div className="page-body">
+        <section aria-live="polite">
+          {loading ? (
+            <div className="grid" aria-label="Searching">{Array.from({ length: 4 }, (_, i) => <PartCardSkeleton key={i} />)}</div>
+          ) : parts === null ? (
+            <div className="state"><span className="state-icon">⌕</span><h3>Choose your car</h3><p>Select a make above to see the parts we have in stock for it.</p></div>
+          ) : parts.length === 0 ? (
+            <div className="state"><span className="state-icon">!</span><h3>Nothing in stock for {vehicle}</h3><p>We may still be able to find one. Send us a request and we'll check current and upcoming stock.</p><Link className="btn" to="/contact#request">Request a part</Link></div>
+          ) : (
+            <>
+              <h2 className="section-title">{parts.length} {parts.length === 1 ? 'part' : 'parts'} for {vehicle}</h2>
+              <div className="grid">{parts.map(p => <PartCard key={p.id} part={p} />)}</div>
+            </>
+          )}
+        </section>
+      </div>
+    </>
   );
 }

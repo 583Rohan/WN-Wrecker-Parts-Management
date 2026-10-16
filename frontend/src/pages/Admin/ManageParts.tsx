@@ -14,6 +14,7 @@ import type { Part } from '../../lib/types';
 import { API, authFetch, fmtDate, money, useToast } from '../../lib/admin';
 import { ConfirmDialog, Modal, Toast } from '../../components/AdminUI';
 import '../../styles/admin.css';
+import { usePageTitle } from '../../lib/usePageTitle';
 
 type Tab = 'all' | 'add' | 'sold';
 type SortKey = 'newest' | 'oldest' | 'price-low' | 'price-high' | 'name';
@@ -307,6 +308,7 @@ function Loading({ label }: { label: string }) {
 
 /* ================================ page ================================ */
 export default function ManageParts() {
+  usePageTitle('Admin · Manage parts');
   // ?tab=add opens the Add part tab directly (used by the dashboard's quick action)
   const [tab, setTab] = useState<Tab>(() => (new URLSearchParams(window.location.search).get('tab') === 'add' ? 'add' : 'all'));
   const [parts, setParts] = useState<Part[]>([]);

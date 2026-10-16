@@ -26,6 +26,7 @@ function App() {
         <Route path="/cart" element={<Cart />} />
         <Route path="/about" element={<About />} />
         <Route path="/contact" element={<Contact />} />
+        <Route path="*" element={<NotFound />} />
       </Route>
 
       {/* admin area — login gate + admin nav */}
@@ -36,7 +37,6 @@ function App() {
         <Route path="invoices" element={<Invoices />} />
       </Route>
 
-      <Route path="*" element={<NotFound />} />
     </Routes>
   );
 }

@@ -26,6 +26,19 @@ namespace WnWrecker.Api.Controllers
             return Ok(makes);
         }
 
+        // GET /api/vehicles/makes/counts  → each in-stock make with how many parts we have (home page tiles)
+        [HttpGet("makes/counts")]
+        public async Task<IActionResult> GetMakeCounts()
+        {
+            var counts = await _db.Parts
+                .Where(p => p.Status == "In Stock" && p.Make != "")
+                .GroupBy(p => p.Make)
+                .Select(g => new { make = g.Key, count = g.Count() })
+                .OrderBy(x => x.make)
+                .ToListAsync();
+            return Ok(counts);
+        }
+
         // GET /api/vehicles/models?make=Toyota  → models for that make
         [HttpGet("models")]
         public async Task<ActionResult<IEnumerable<string>>> GetModels(string make)

@@ -10,6 +10,7 @@ import InvoiceEditor, { Totals } from '../../components/InvoiceEditor';
 import SharePanel from '../../components/SharePanel';
 import { useBusiness } from '../../lib/business';
 import '../../styles/admin.css';
+import { usePageTitle } from '../../lib/usePageTitle';
 
 /* ================================ types ================================ */
 type Tab = 'all' | 'new';
@@ -134,6 +135,7 @@ function InvoiceList({ invoices, expandedId, onToggle, actions }: {
 
 /* ================================ page ================================ */
 export default function Invoices() {
+  usePageTitle('Admin · Invoices');
   // dashboard links: ?tab=new, ?status=Unpaid, ?open=<invoice id>
   const [tab, setTab] = useState<Tab>(() => (new URLSearchParams(window.location.search).get('tab') === 'new' ? 'new' : 'all'));
   const [invoices, setInvoices] = useState<Invoice[]>([]);

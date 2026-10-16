@@ -11,6 +11,7 @@ import SharePanel from '../../components/SharePanel';
 import { useBusiness } from '../../lib/business';
 import { startPolling } from '../../lib/poll';
 import '../../styles/admin.css';
+import { usePageTitle } from '../../lib/usePageTitle';
 
 /* ================================ types ================================ */
 type ChatStatus = 'Needs reply' | 'Waiting on customer' | 'Closed';
@@ -83,6 +84,7 @@ const pingNav = () => window.dispatchEvent(new Event('wn-chats-changed'));
 
 /* ================================ page ================================ */
 export default function ChatManagement() {
+  usePageTitle('Admin · Chats');
   const { toast, notify } = useToast();
   const { name: businessName } = useBusiness();
   const [chats, setChats] = useState<ChatSummary[]>([]);

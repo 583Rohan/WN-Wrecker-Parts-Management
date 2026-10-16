@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { clearChatSession, getChatSession, rejoinConversation, startConversation } from '../lib/chat';
 import { startPolling } from '../lib/poll';
 import { useBusiness } from '../lib/business';
+import { money } from '../lib/format';
 import '../styles/chat-widget.css';
 
 const API = import.meta.env.VITE_API_URL;
@@ -28,7 +29,6 @@ function fmtTime(iso: string) {
   return isNaN(d.getTime()) ? '' : d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
 }
 
-const money = (n: number) => '$' + Number(n || 0).toLocaleString('en-AU', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const invoiceUrl = (token: string | null, download = false) =>
   token ? `${API}/api/invoices/p/${token}/pdf${download ? '?download=true' : ''}` : '#';
 

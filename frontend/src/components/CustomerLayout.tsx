@@ -1,9 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Link, NavLink, Outlet } from 'react-router-dom';
 import ChatWidget from './ChatWidget';
 import SiteFooter from './SiteFooter';
 import { useCart } from '../lib/cart';
-import { useBusiness } from '../lib/business';
+import { useScrolled } from '../lib/useScrolled';
 
 const linkStyle = ({ isActive }: { isActive: boolean }) => ({
   color: isActive ? 'var(--accent)' : undefined,
@@ -13,14 +13,11 @@ const linkStyle = ({ isActive }: { isActive: boolean }) => ({
 export default function CustomerLayout() {
   const { count } = useCart();
   const [menuOpen, setMenuOpen] = useState(false);
-  const { name } = useBusiness();
-
-  // browser tab title uses the business name from appsettings.json
-  useEffect(() => { document.title = `${name} — Quality recycled car parts`; }, [name]);
+  const scrolled = useScrolled();
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
-      <header className="nav">
+      <header className={`nav${scrolled ? ' scrolled' : ''}`}>
         <div className="container nav-inner">
           <Link to="/" className="brand" onClick={() => setMenuOpen(false)}>WN<span>Wrecker</span></Link>
           <button

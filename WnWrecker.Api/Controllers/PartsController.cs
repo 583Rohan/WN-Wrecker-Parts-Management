@@ -21,12 +21,15 @@ namespace WnWrecker.Api.Controllers
             _photos = photos;
         }
 
-        // GET /api/parts?search=&make=&model=&year=&inStock=true   -> list (with optional search/filters)
-        //   search  : every word must match the name, make, model, year or description (not case-sensitive)
-        //   inStock : true = only parts customers can buy (the shop, car finder and home page use this)
+        // GET /api/parts?search=&make=&model=&year=&inStock=true&sort=&page=&pageSize=   -> list (with optional search/filters)
+        //   search   : every word must match the name, make, model, year or description (not case-sensitive)
+        //   inStock  : true = only parts customers can buy (the shop, car finder and home page use this)
+        //   sort     : newest (default) | price-asc | price-desc
+        //   pageSize : return one page at a time (max 60); the total number of matches is sent in the X-Total-Count header
         [EndpointSummary("List / search parts")]
         [HttpGet]
-        public async Task<ActionResult<IEnumerable<Part>>> GetParts(string? search, string? make, string? model, int? year, bool? inStock)
+        public async Task<ActionResult<IEnumerable<Part>>> GetParts(string? search, string? make, string? model, int? year, bool? inStock,
+                                                                    string? sort, int? page, int? pageSize)
         {
             var query = _db.Parts.AsQueryable();
 
@@ -60,7 +63,22 @@ namespace WnWrecker.Api.Controllers
             if (year.HasValue)
                 query = query.Where(p => p.Year == year);
 
-            return await query.OrderByDescending(p => p.CreatedAt).ToListAsync();
+            query = sort switch
+            {
+                "price-asc" => query.OrderBy(p => p.Price).ThenByDescending(p => p.CreatedAt),
+                "price-desc" => query.OrderByDescending(p => p.Price).ThenByDescending(p => p.CreatedAt),
+                _ => query.OrderByDescending(p => p.CreatedAt),
+            };
+
+            if (pageSize.HasValue)
+            {
+                var size = Math.Clamp(pageSize.Value, 1, 60);
+                var number = Math.Max(page ?? 1, 1);
+                Response.Headers["X-Total-Count"] = (await query.CountAsync()).ToString();
+                query = query.Skip((number - 1) * size).Take(size);
+            }
+
+            return await query.ToListAsync();
         }
 
         // GET /api/parts/5   -> one part

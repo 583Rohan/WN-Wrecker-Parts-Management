@@ -4,6 +4,9 @@ import type { Part } from '../lib/types';
 import { addToCart } from '../lib/cart';
 import { enquireAboutParts, openChat } from '../lib/chat';
 import { isForSale, statusLabel } from '../lib/parts';
+import { money } from '../lib/format';
+import { usePageTitle } from '../lib/usePageTitle';
+import { PartPhoto } from '../components/PartCard';
 
 const API = import.meta.env.VITE_API_URL;
 
@@ -12,6 +15,7 @@ export default function PartDetail() {
   const [part, setPart] = useState<Part | null>(null);
   const [notFound, setNotFound] = useState(false);
   const [added, setAdded] = useState(false);
+  usePageTitle(part ? `${part.name} — ${part.make} ${part.model}` : 'Part');
 
   useEffect(() => {
     let alive = true;
@@ -22,32 +26,75 @@ export default function PartDetail() {
     return () => { alive = false; };
   }, [id]);
 
-  if (notFound) return <div className="section"><div className="container"><h2>Part not found</h2><p className="muted">It may have been sold or removed.</p><Link to="/parts" className="btn btn-outline">Back to shop</Link></div></div>;
-  if (!part) return <div className="section"><div className="container"><p className="muted">Loading…</p></div></div>;
+  const hero = (
+    <section className="page-hero">
+      <div className="page-hero-inner">
+        <Link to="/parts" className="back-link">← Back to shop</Link>
+        <p className="eyebrow">{part ? `${part.year} ${part.make} ${part.model}` : 'Part details'}</p>
+        {part && <h1>{part.name}</h1>}
+      </div>
+    </section>
+  );
+
+  if (notFound) {
+    return (
+      <>
+        {hero}
+        <div className="page-body">
+          <div className="state">
+            <span className="state-icon">?</span>
+            <h3>Part not found</h3>
+            <p>It may have been sold or removed. Have a look at what's in stock, or ask us to find one.</p>
+            <Link to="/parts" className="btn">Browse parts</Link>
+          </div>
+        </div>
+      </>
+    );
+  }
+
+  if (!part) {
+    return (
+      <>
+        {hero}
+        <div className="page-body">
+          <div className="pd-grid" aria-label="Loading part">
+            <div className="photo pd-photo skeleton" />
+            <div className="panel">
+              <div className="skeleton skeleton-line short" style={{ height: 22 }} />
+              <div className="skeleton skeleton-line" style={{ height: 34, width: '40%', marginTop: 18 }} />
+              <div className="skeleton skeleton-line" />
+              <div className="skeleton skeleton-line short" />
+              <div className="skeleton skeleton-line short" />
+            </div>
+          </div>
+        </div>
+      </>
+    );
+  }
 
   const available = isForSale(part);
   const add = () => { addToCart({ id: part.id, name: part.name, make: part.make, model: part.model, year: part.year, price: part.price, photoUrl: part.photoUrl }); setAdded(true); };
   const enquire = () => enquireAboutParts([{ id: part.id, label: `${part.name} — ${part.make} ${part.model} ${part.year}` }]);
 
   return (
-    <div className="section">
-      <div className="container">
-        <Link to="/parts" className="muted" style={{ fontSize: 14 }}>← Back to shop</Link>
+    <>
+      {hero}
+      <div className="page-body">
         <div className="pd-grid">
-          <div className="card-img pd-photo" style={part.photoUrl ? { backgroundImage: `url(${part.photoUrl})` } : undefined}>
-            {!part.photoUrl && 'No photo'}
-          </div>
-          <div>
-            <h1 style={{ margin: '0 0 8px' }}>{part.name}</h1>
+          <PartPhoto part={part} className="pd-photo" />
+          <div className="panel">
             <span className={`badge ${available ? 'badge-stock' : 'badge-sold'}`}>{statusLabel(part.status)}</span>
-            <div className="price" style={{ fontSize: 30, margin: '16px 0' }}>${part.price}</div>
-            <table style={{ fontSize: 14, marginBottom: 20 }}><tbody>
-              <tr><td className="muted" style={{ padding: '2px 16px 2px 0' }}>Make</td><td>{part.make}</td></tr>
-              <tr><td className="muted" style={{ padding: '2px 16px 2px 0' }}>Model</td><td>{part.model}</td></tr>
-              <tr><td className="muted" style={{ padding: '2px 16px 2px 0' }}>Year</td><td>{part.year}</td></tr>
-              <tr><td className="muted" style={{ padding: '2px 16px 2px 0' }}>Condition</td><td>{part.condition}</td></tr>
-            </tbody></table>
-            {part.description && <p style={{ marginBottom: 20 }}>{part.description}</p>}
+            <div className="pd-price">
+              <span className="price price-lg">{money(part.price)}</span>
+              <span className="gst">incl. GST</span>
+            </div>
+            <dl className="spec-list">
+              <dt>Make</dt><dd>{part.make}</dd>
+              <dt>Model</dt><dd>{part.model}</dd>
+              <dt>Year</dt><dd>{part.year}</dd>
+              <dt>Condition</dt><dd>{part.condition}</dd>
+            </dl>
+            {part.description && <p className="muted" style={{ lineHeight: 1.6, margin: '0 0 20px' }}>{part.description}</p>}
 
             {available ? (
               <div className="pd-actions">
@@ -67,6 +114,6 @@ export default function PartDetail() {
           </div>
         </div>
       </div>
-    </div>
+    </>
   );
 }

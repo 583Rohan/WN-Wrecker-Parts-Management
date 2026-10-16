@@ -5,6 +5,7 @@ import { toIso } from '../../lib/invoices';
 import { Toast } from '../../components/AdminUI';
 import { startPolling } from '../../lib/poll';
 import '../../styles/admin.css';
+import { usePageTitle } from '../../lib/usePageTitle';
 
 /* ================================ types ================================ */
 type InvoiceStatus = 'Unpaid' | 'Paid' | 'Void' | 'Refunded';
@@ -56,6 +57,7 @@ async function fetchStats(): Promise<Stats> {
 
 /* ================================ page ================================ */
 export default function AdminHome() {
+  usePageTitle('Admin · Dashboard');
   const navigate = useNavigate();
   const { toast, notify } = useToast();
   const [stats, setStats] = useState<Stats | null>(null);

@@ -19,8 +19,7 @@ export function authFetch(url: string, options: RequestInit = {}) {
   });
 }
 
-export const money = (n: number) =>
-  '$' + Number(n || 0).toLocaleString('en-AU', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+export { money } from './format';   // one price format for the whole site
 
 // backend sends UTC without a 'Z' — add one so it isn't read as local time
 export function fmtDate(iso?: string | null, withTime = false) {

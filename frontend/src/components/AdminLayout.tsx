@@ -3,7 +3,7 @@ import { Link, NavLink, Outlet } from 'react-router-dom';
 import { ConfirmDialog } from './AdminUI';
 import AdminLogin from './AdminLogin';
 import { startPolling } from '../lib/poll';
-import { useBusiness } from '../lib/business';
+import { useScrolled } from '../lib/useScrolled';
 import '../styles/admin.css';
 
 const API = import.meta.env.VITE_API_URL;
@@ -20,9 +20,7 @@ export default function AdminLayout() {
   const [needsReply, setNeedsReply] = useState(0);
   const [confirmLogout, setConfirmLogout] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
-  const { name } = useBusiness();
-
-  useEffect(() => { document.title = `${name} Admin`; }, [name]);
+  const scrolled = useScrolled();
 
   // badge on "Chats" = customers waiting for a reply (refreshes every 15s, or right after a reply)
   useEffect(() => {
@@ -46,7 +44,7 @@ export default function AdminLayout() {
 
   return (
     <div style={{ minHeight: '100vh' }}>
-      <header className="nav">
+      <header className={`nav${scrolled ? ' scrolled' : ''}`}>
         <div className="container nav-inner">
           <Link to="/admin" className="brand" onClick={() => setMenuOpen(false)}>WN<span>Wrecker</span> Admin</Link>
           <button
