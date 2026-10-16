@@ -12,7 +12,7 @@ RUN dotnet publish -c Release -o /app --no-restore
 FROM mcr.microsoft.com/dotnet/aspnet:10.0
 # fonts for the PDF invoices/transcripts; Australian time for dates printed on them
 RUN apt-get update \
- && apt-get install -y --no-install-recommends fontconfig fonts-dejavu-core \
+ && apt-get install -y --no-install-recommends fontconfig fonts-dejavu-core libgssapi-krb5-2 \
  && rm -rf /var/lib/apt/lists/*
 ENV TZ=Australia/Brisbane \
     ASPNETCORE_ENVIRONMENT=Production
