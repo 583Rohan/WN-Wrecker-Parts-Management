@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using WnWrecker.Api.Data;
 using WnWrecker.Api.Models;
@@ -48,6 +49,7 @@ namespace WnWrecker.Api.Controllers
         // POST /api/chat/start  -> create a conversation, return its token + reference code
         [EndpointSummary("Start a conversation")]
         [HttpPost("start")]
+        [EnableRateLimiting("chat")]
         public async Task<IActionResult> Start(StartRequest req)
         {
             var convo = new Conversation
@@ -64,6 +66,7 @@ namespace WnWrecker.Api.Controllers
         // POST /api/chat/rejoin  -> come back to a chat with its reference code
         [EndpointSummary("Rejoin a conversation with its reference code")]
         [HttpPost("rejoin")]
+        [EnableRateLimiting("strict")]
         public async Task<IActionResult> Rejoin(RejoinRequest req)
         {
             var code = ChatInfo.NormalizeCode(req.Code);
@@ -99,6 +102,7 @@ namespace WnWrecker.Api.Controllers
         // auto-replies (answer / options / handoff) while no human has taken over
         [EndpointSummary("Send a message")]
         [HttpPost("{token:guid}/messages")]
+        [EnableRateLimiting("chat")]
         public async Task<IActionResult> SendMessage(Guid token, SendMessageRequest req)
         {
             var convo = await Find(token);
@@ -129,6 +133,7 @@ namespace WnWrecker.Api.Controllers
         // POST /api/chat/{token}/details  -> customer adds their name / contact (optional)
         [EndpointSummary("Save my name and contact")]
         [HttpPost("{token:guid}/details")]
+        [EnableRateLimiting("chat")]
         public async Task<IActionResult> SaveDetails(Guid token, DetailsRequest req)
         {
             var convo = await Find(token);
@@ -142,6 +147,7 @@ namespace WnWrecker.Api.Controllers
         // POST /api/chat/{token}/parts  -> attach a product to the conversation
         [EndpointSummary("Attach a product")]
         [HttpPost("{token:guid}/parts")]
+        [EnableRateLimiting("chat")]
         public async Task<IActionResult> AttachPart(Guid token, AttachPartRequest req)
         {
             var convo = await _db.Conversations.Include(c => c.Parts)
@@ -161,6 +167,7 @@ namespace WnWrecker.Api.Controllers
         // DELETE /api/chat/{token}/parts/{partId}  -> remove a product
         [EndpointSummary("Remove a product")]
         [HttpDelete("{token:guid}/parts/{partId}")]
+        [EnableRateLimiting("chat")]
         public async Task<IActionResult> DetachPart(Guid token, int partId)
         {
             var convo = await _db.Conversations.Include(c => c.Parts)
@@ -178,6 +185,7 @@ namespace WnWrecker.Api.Controllers
         // POST /api/chat/{token}/human  -> customer asks for a human; hands off and silences the bot
         [EndpointSummary("Request a human")]
         [HttpPost("{token:guid}/human")]
+        [EnableRateLimiting("chat")]
         public async Task<IActionResult> RequestHuman(Guid token)
         {
             var convo = await Find(token);
@@ -197,6 +205,7 @@ namespace WnWrecker.Api.Controllers
         // POST /api/chat/{token}/close  -> customer closes the chat for good (it stays readable)
         [EndpointSummary("Close my chat")]
         [HttpPost("{token:guid}/close")]
+        [EnableRateLimiting("chat")]
         public async Task<IActionResult> Close(Guid token)
         {
             var convo = await Find(token);

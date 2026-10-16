@@ -55,6 +55,7 @@ namespace WnWrecker.Api.Data
             modelBuilder.Entity<Message>(e =>
             {
                 e.Property(m => m.Kind).HasMaxLength(20).HasDefaultValue("text");   // existing messages become "text"
+                e.HasIndex(m => new { m.ConversationId, m.SentAt });              // loading a chat's messages in order
                 e.HasOne(m => m.Invoice)
                  .WithMany()
                  .HasForeignKey(m => m.InvoiceId)

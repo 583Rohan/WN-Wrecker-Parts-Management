@@ -1,4 +1,5 @@
 ﻿using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.IdentityModel.Tokens;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
@@ -18,6 +19,7 @@ namespace WnWrecker.Api.Controllers
 
         // POST /api/auth/login -> a token the admin pages send with every request (valid 8 hours)
         [HttpPost("login")]
+        [EnableRateLimiting("strict")]
         public IActionResult Login(LoginRequest login)
         {
             if (!Matches(login.Username, _config["AdminCredentials:Username"]) ||
