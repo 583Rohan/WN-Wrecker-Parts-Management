@@ -41,11 +41,11 @@ export default function PartCard({ part }: { part: Part }) {
 export function PartCardSkeleton() {
   return (
     <div className="card" aria-hidden="true">
-      <div className="photo skeleton" style={{ borderRadius: 0 }} />
+      <div className="photo skeleton" />
       <div className="card-body">
         <div className="skeleton skeleton-line" />
         <div className="skeleton skeleton-line short" />
-        <div className="skeleton skeleton-line short" style={{ height: 20 }} />
+        <div className="skeleton skeleton-line short tall" />
       </div>
     </div>
   );

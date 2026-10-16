@@ -6,24 +6,25 @@ import { enquireAboutParts } from '../lib/chat';
 import { isForSale } from '../lib/parts';
 import { money } from '../lib/format';
 import { usePageTitle } from '../lib/usePageTitle';
+import { API } from '../lib/api';
 import { PartPhoto } from '../components/PartCard';
-
-const API = import.meta.env.VITE_API_URL;
 
 export default function Cart() {
   usePageTitle('Your cart');
   const { items, removeFromCart, clearCart } = useCart();
-  // current stock status of every part, so sold or removed parts are flagged
+  // today's status and price of the parts in the cart, so sold or removed parts are flagged
   const [stock, setStock] = useState<Map<number, Part> | null>(null);
+  const ids = items.map(i => i.id).join(',');
 
   useEffect(() => {
+    if (!ids) return;
     let alive = true;
-    fetch(`${API}/api/parts`)
-      .then(r => (r.ok ? r.json() : []))
+    fetch(`${API}/api/parts?ids=${ids}`)
+      .then(r => (r.ok ? r.json() : Promise.reject(r)))
       .then((parts: Part[]) => { if (alive) setStock(new Map(parts.map(p => [p.id, p]))); })
       .catch(() => { /* if the check fails, treat everything as available */ });
     return () => { alive = false; };
-  }, []);
+  }, [ids]);
 
   const isAvailable = (id: number) => {
     if (!stock) return true;
@@ -87,13 +88,13 @@ export default function Cart() {
             </table>
             <div className="cart-total">
               <span className="muted">Total for available parts</span>
-              <span><span className="price price-lg">{money(total)}</span><span className="gst" style={{ textAlign: 'right' }}>incl. GST</span></span>
+              <span><span className="price price-lg">{money(total)}</span><span className="gst">incl. GST</span></span>
             </div>
             <div className="cart-actions">
               <button className="btn" onClick={enquire} disabled={available.length === 0}>Enquire about {available.length === 1 ? 'this part' : `these ${available.length} parts`}</button>
               <button className="btn btn-outline" onClick={clearCart}>Clear cart</button>
             </div>
-            <p className="muted" style={{ fontSize: 13, margin: '12px 0 0' }}>Enquiring opens a chat with our team about your selected parts — no account needed.</p>
+            <p className="muted cart-note">Enquiring opens a chat with our team about your selected parts — no account needed.</p>
           </div>
         )}
       </div>

@@ -36,7 +36,7 @@ namespace WnWrecker.Api.Controllers
         private const string Sold = "Sold";
         private const string WrittenOff = "Written off";   // refunded but not resold (e.g. damaged) — hidden from the shop, not counted as sold
 
-        // ---------------------------------------------------------------- helpers
+        // Helpers
 
         private static string NewToken() => Guid.NewGuid().ToString("N");
 
@@ -94,7 +94,7 @@ namespace WnWrecker.Api.Controllers
         private async Task<Invoice?> Find(int id) =>
             await _db.Invoices.Include(i => i.Items).FirstOrDefaultAsync(i => i.Id == id);
 
-        // ---------------------------------------------------------------- create
+        // Create
 
         // POST /api/admin/invoices  -> create an invoice (status Unpaid; parts are NOT marked sold yet)
         [EndpointSummary("Create an invoice")]
@@ -204,7 +204,7 @@ namespace WnWrecker.Api.Controllers
             return Ok(ToDto(invoice));
         }
 
-        // ---------------------------------------------------------------- read
+        // Read
 
         // GET /api/admin/invoices  -> every invoice with its items
         [EndpointSummary("List invoices")]
@@ -241,7 +241,7 @@ namespace WnWrecker.Api.Controllers
             return File(bytes, "application/pdf", $"{inv.Number}.pdf");
         }
 
-        // ---------------------------------------------------------------- status changes
+        // Status changes
 
         // POST /api/admin/invoices/5/paid  -> mark paid; its parts become Sold everywhere
         [EndpointSummary("Mark invoice as paid")]

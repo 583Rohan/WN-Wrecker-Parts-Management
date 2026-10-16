@@ -3,9 +3,11 @@
     public class ConversationPart
     {
         public int Id { get; set; }
-        public int ConversationId { get; set; }            // foreign key → the conversation
-        public int PartId { get; set; }                    // foreign key → the part
-        public string Status { get; set; } = "New";        // New / In Discussion / Reserved / Awaiting Pickup / Sold / Closed
+        public int ConversationId { get; set; }
+        public int PartId { get; set; }
+
+        // no longer used (chats now show the part's live stock status); dropped with the Postgres migration
+        public string Status { get; set; } = "New";
         public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 
         public Conversation? Conversation { get; set; }

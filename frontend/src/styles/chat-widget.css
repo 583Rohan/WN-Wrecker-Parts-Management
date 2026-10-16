@@ -1,4 +1,4 @@
-/* ===== customer chat widget ===== */
+/* Customer chat widget */
 .cw-bubble, .cw-panel { --cw-navy: var(--c-navy); --cw-orange: var(--c-amber); --cw-muted: var(--c-muted); --cw-border: #e3e8ef; font-family: var(--font-body); }
 
 .cw-bubble { position: fixed; z-index: 150; right: 20px; bottom: 20px; width: 60px; height: 60px; display: grid; place-items: center; border: 2px solid var(--cw-orange); border-radius: 50%; background: var(--cw-navy); color: var(--cw-orange); box-shadow: 0 10px 28px rgba(13,25,48,.35); cursor: pointer; transition: transform .15s; }
@@ -62,7 +62,7 @@
 .cw-card p { margin: 0; color: var(--cw-muted); font-size: .74rem; line-height: 1.45; }
 .cw-error { padding: 8px 10px; border-radius: 10px; background: #fff1f1; color: #991b1b; font-size: .76rem; }
 
-.cw-row { display: flex; gap: 8px; align-items: center; }
+.cw-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .cw-row > * { flex: 1; }
 .cw-input { width: 100%; min-height: 38px; padding: 8px 10px; box-sizing: border-box; border: 1px solid #d5dde7; border-radius: 9px; background: #fff; color: #111827; font: inherit; font-size: .86rem; outline: none; }
 .cw-input:focus { border-color: var(--cw-orange); box-shadow: 0 0 0 3px rgba(247,164,17,.15); }
@@ -74,7 +74,7 @@
 .cw-suggest { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 6px; padding: 8px 12px; border-top: 1px solid var(--cw-border); }
 .cw-compose { display: flex; gap: 8px; padding: 10px 12px; border-top: 1px solid var(--cw-border); background: #fff; }
 .cw-compose .cw-input { flex: 1; }
-.cw-closed { display: grid; gap: 6px; padding: 12px 14px; border-top: 1px solid var(--cw-border); background: #f4f7fa; text-align: center; }
+.cw-closed { display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px; padding: 12px 14px; border-top: 1px solid var(--cw-border); background: #f4f7fa; text-align: center; }
 .cw-closed strong { color: var(--cw-navy); font-size: .88rem; }
 .cw-closed span { color: var(--cw-muted); font-size: .76rem; }
 

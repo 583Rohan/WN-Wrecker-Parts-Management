@@ -1,9 +1,10 @@
 import { useState } from 'react';
 import { Link, NavLink, Outlet } from 'react-router-dom';
-import ChatWidget from './ChatWidget';
-import SiteFooter from './SiteFooter';
 import { useCart } from '../lib/cart';
 import { useScrolled } from '../lib/useScrolled';
+import { useScrollToTop } from '../lib/useScrollToTop';
+import ChatWidget from './ChatWidget';
+import SiteFooter from './SiteFooter';
 
 const linkStyle = ({ isActive }: { isActive: boolean }) => ({
   color: isActive ? 'var(--accent)' : undefined,
@@ -14,9 +15,10 @@ export default function CustomerLayout() {
   const { count } = useCart();
   const [menuOpen, setMenuOpen] = useState(false);
   const scrolled = useScrolled();
+  useScrollToTop();
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
+    <div className="site">
       <header className={`nav${scrolled ? ' scrolled' : ''}`}>
         <div className="container nav-inner">
           <Link to="/" className="brand" onClick={() => setMenuOpen(false)}>WN<span>Wrecker</span></Link>
@@ -40,7 +42,7 @@ export default function CustomerLayout() {
           </nav>
         </div>
       </header>
-      <main style={{ flex: 1 }}><Outlet /></main>
+      <main className="site-main"><Outlet /></main>
       <SiteFooter />
       <ChatWidget />
     </div>

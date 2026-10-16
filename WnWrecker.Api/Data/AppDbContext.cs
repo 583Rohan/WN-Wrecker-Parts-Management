@@ -11,7 +11,7 @@ namespace WnWrecker.Api.Data
         {
         }
 
-        public DbSet<Part> Parts => Set<Part>();   // this becomes the "Parts" table
+        public DbSet<Part> Parts => Set<Part>();
 
         public DbSet<Conversation> Conversations => Set<Conversation>();
         public DbSet<Message> Messages => Set<Message>();

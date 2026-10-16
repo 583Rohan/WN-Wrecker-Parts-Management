@@ -8,8 +8,8 @@ using WnWrecker.Api.Services;
 namespace WnWrecker.Api.Controllers
 {
     [ApiController]
-    [Route("api/admin/chats")]      // custom base path, not [controller]
-    [Authorize]                     // EVERY endpoint here needs the admin token
+    [Route("api/admin/chats")]
+    [Authorize]                     // every endpoint here needs the admin login
     public class AdminChatController : ControllerBase
     {
         private readonly AppDbContext _db;
@@ -73,11 +73,6 @@ namespace WnWrecker.Api.Controllers
                         .OrderByDescending(m => m.SentAt).ThenByDescending(m => m.Id)
                         .Select(m => m.Sender)
                         .FirstOrDefault(),
-                    // customer + admin message text, so the admin search can find older messages too
-                    Texts = c.Messages
-                        .Where(m => m.Sender == "customer" || m.Sender == "admin")
-                        .Select(m => m.Text)
-                        .ToList(),
                     Parts = c.Parts
                         .Where(cp => cp.Part != null)
                         .Select(cp => new { cp.PartId, cp.Part!.Name, cp.Part.Make, cp.Part.Model, cp.Part.Year, cp.Part.Price, cp.Part.Status })
@@ -108,7 +103,6 @@ namespace WnWrecker.Api.Controllers
                         text = r.Last.Kind == "invoice" && r.Last.InvoiceNumber != null ? $"Invoice {r.Last.InvoiceNumber} sent" : r.Last.Text,
                         sender = r.Last.Sender
                     },
-                    searchText = string.Join(" ", r.Texts),
                     parts = r.Parts.Select(p => new
                     {
                         p.PartId,
@@ -119,6 +113,25 @@ namespace WnWrecker.Api.Controllers
                     })
                 };
             }));
+        }
+
+        // GET /api/admin/chats/search?q=gearbox  -> ids of chats where a customer or admin message contains the text
+        // (the Chats page uses this so its search also finds older messages, without loading every message in the list)
+        [EndpointSummary("Search chat messages")]
+        [HttpGet("search")]
+        public async Task<IActionResult> Search(string? q)
+        {
+            var term = q?.Trim().ToLower();
+            if (string.IsNullOrEmpty(term) || term.Length < 2) return Ok(Array.Empty<int>());
+
+            var ids = await _db.Messages
+                .AsNoTracking()
+                .Where(m => (m.Sender == "customer" || m.Sender == "admin") && m.Text.ToLower().Contains(term))
+                .Select(m => m.ConversationId)
+                .Distinct()
+                .Take(200)
+                .ToListAsync();
+            return Ok(ids);
         }
 
         // GET /api/admin/chats/summary  -> small counts for the nav badge / dashboard
@@ -216,7 +229,7 @@ namespace WnWrecker.Api.Controllers
                 Sender = "admin",
                 Kind = "invoice",
                 InvoiceId = inv.Id,
-                Text = $"Invoice {inv.Number} — ${inv.Total:N2} (incl. GST)"
+                Text = $"Invoice {inv.Number} — {ChatInfo.Money(inv.Total)} (incl. GST)"
             });
             c.HandedOff = true;
             c.LastMessageAt = DateTime.UtcNow;

@@ -3,7 +3,7 @@ namespace WnWrecker.Api.Models
     public class Message
     {
         public int Id { get; set; }
-        public int ConversationId { get; set; }            // foreign key → which conversation
+        public int ConversationId { get; set; }
         public string Sender { get; set; } = "customer";   // "customer", "admin", "bot" or "system"
         public string Text { get; set; } = "";
         public DateTime SentAt { get; set; } = DateTime.UtcNow;
@@ -12,6 +12,6 @@ namespace WnWrecker.Api.Models
         public int? InvoiceId { get; set; }                // set when Kind == "invoice"
         public Invoice? Invoice { get; set; }
 
-        public Conversation? Conversation { get; set; }     // navigation back to the parent
+        public Conversation? Conversation { get; set; }
     }
 }

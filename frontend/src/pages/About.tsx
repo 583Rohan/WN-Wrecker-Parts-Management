@@ -15,12 +15,12 @@ export default function About() {
       </section>
 
       <div className="page-body narrow">
-        <div className="panel">
-          <p style={{ marginTop: 0, lineHeight: 1.7 }}>We dismantle and test parts from a wide range of makes and models, so you can find affordable, reliable replacements for your vehicle.</p>
-          <p style={{ marginBottom: 0, lineHeight: 1.7 }}>Every part is checked before it's listed. Not sure if something fits? Use the <Link to="/finder" style={{ textDecoration: 'underline' }}>car finder</Link> or message us — we're happy to help.</p>
+        <div className="panel prose">
+          <p>We dismantle and test parts from a wide range of makes and models, so you can find affordable, reliable replacements for your vehicle.</p>
+          <p>Every part is checked before it's listed. Not sure if something fits? Use the <Link to="/finder">car finder</Link> or message us — we're happy to help.</p>
         </div>
 
-        <h2 className="section-title" style={{ marginTop: 36 }}>Why buy from us</h2>
+        <h2 className="section-title spaced">Why buy from us</h2>
         <ul className="about-list">
           <li><strong>Quality checked</strong><span>Every part is tested and inspected before it's listed.</span></li>
           <li><strong>Better value</strong><span>Affordable prices compared with buying new.</span></li>

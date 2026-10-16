@@ -1,10 +1,10 @@
-import { StrictMode } from 'react'
-import { createRoot } from 'react-dom/client'
-import { BrowserRouter } from 'react-router-dom'
-import '@fontsource-variable/inter';   // body text font (bundled with the site, no Google request)
+import { StrictMode } from 'react';
+import { createRoot } from 'react-dom/client';
+import { BrowserRouter } from 'react-router-dom';
+import '@fontsource-variable/inter';   // text font, bundled with the site
 import '@fontsource/anton';            // heading font
-import './index.css'
-import App from './App.tsx'
+import './index.css';                  // shared styles first, so page styles can build on them
+import App from './App';
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
@@ -12,4 +12,4 @@ createRoot(document.getElementById('root')!).render(
       <App />
     </BrowserRouter>
   </StrictMode>,
-)
+);

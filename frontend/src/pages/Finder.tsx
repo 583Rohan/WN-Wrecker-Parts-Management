@@ -1,10 +1,9 @@
 import { useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import type { Part } from '../lib/types';
-import PartCard, { PartCardSkeleton } from '../components/PartCard';
 import { usePageTitle } from '../lib/usePageTitle';
-
-const API = import.meta.env.VITE_API_URL;
+import { API } from '../lib/api';
+import PartCard, { PartCardSkeleton } from '../components/PartCard';
 
 const getJson = <T,>(url: string, fallback: T): Promise<T> =>
   fetch(url).then(r => (r.ok ? r.json() : fallback)).catch(() => fallback);
@@ -15,7 +14,7 @@ export default function Finder() {
   const [makes, setMakes] = useState<string[]>([]);
   const [models, setModels] = useState<string[]>([]);
   const [years, setYears] = useState<number[]>([]);
-  const [make, setMake] = useState(() => searchParams.get('make') ?? '');   // ?make=Toyota pre-selects the make
+  const [make, setMake] = useState(() => searchParams.get('make') ?? '');
   const [model, setModel] = useState('');
   const [year, setYear] = useState('');
   const [parts, setParts] = useState<Part[] | null>(null);
@@ -23,7 +22,6 @@ export default function Finder() {
 
   useEffect(() => { getJson<string[]>(`${API}/api/vehicles/makes`, []).then(setMakes); }, []);
 
-  // models for the chosen make
   useEffect(() => {
     if (!make) return;
     let alive = true;
@@ -31,7 +29,6 @@ export default function Finder() {
     return () => { alive = false; };
   }, [make]);
 
-  // years for the chosen make + model
   useEffect(() => {
     if (!make || !model) return;
     let alive = true;
@@ -44,7 +41,7 @@ export default function Finder() {
   const chooseModel = (value: string) => { setModel(value); setYear(''); setYears([]); setParts(null); };
 
   const findParts = async () => {
-    const params = new URLSearchParams({ make, inStock: 'true' });   // only parts customers can buy
+    const params = new URLSearchParams({ make, inStock: 'true' });
     if (model) params.set('model', model);
     if (year) params.set('year', year);
     setLoading(true);

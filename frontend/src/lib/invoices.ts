@@ -1,11 +1,13 @@
 import type { Part } from './types';
-import { API, authFetch, money } from './admin';
+import { API } from './api';
+import { authFetch } from './admin';
+import { money } from './format';
 
-// Shared invoice types + helpers (used by the Invoices page and the Chats "Send invoice" popup)
+// Invoice types and helpers shared by the Invoices page and the Chats "Send invoice" popup
 
 export type InvoiceStatus = 'Unpaid' | 'Paid' | 'Void' | 'Refunded';
 
-export type InvoiceItem = {
+type InvoiceItem = {
   id: number;
   partId: number | null;
   description: string;
@@ -33,15 +35,10 @@ export type Invoice = {
   items: InvoiceItem[];
 };
 
-export const forSale = (p: Part) => (p.status || '').trim().toLowerCase() === 'in stock';
 export const partLabel = (p: Part) => `${p.name} — ${p.make} ${p.model} ${p.year}`;
-export const isEmail = (s?: string | null) => !!s && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s.trim());
-export const invoiceLink = (token?: string | null, download = false) =>
-  token ? `${API}/api/invoices/p/${token}/pdf${download ? '?download=true' : ''}` : '';
-// businessName comes from useBusiness() (appsettings.json → "Business")
 export const invoiceShareMessage = (inv: Invoice, businessName: string) =>
   `Hi ${inv.customerName}, here is your invoice ${inv.number} from ${businessName} for ${money(Number(inv.total))} (incl. GST).`;
-export const partIdsOf = (inv: Invoice) => inv.items.filter(i => i.partId !== null).map(i => i.partId as number);
+const partIdsOf = (inv: Invoice) => inv.items.filter(i => i.partId !== null).map(i => i.partId as number);
 
 // GST-inclusive maths: the price already includes GST, GST = total / 11
 export function gstSplit(total: number) {
@@ -69,7 +66,7 @@ export async function fetchParts(): Promise<Part[]> {
   return res.json();
 }
 
-// pulls a readable message out of an error response
+// a readable message from an API error response
 export async function readError(res: Response, fallback: string) {
   try {
     const text = await res.text();
@@ -101,9 +98,3 @@ export async function downloadAuthed(url: string, filename: string) {
 
 export const downloadInvoicePdf = (inv: Invoice) =>
   downloadAuthed(`${API}/api/admin/invoices/${inv.id}/pdf`, `${inv.number}.pdf`);
-
-// backend sends UTC without a 'Z'
-export function toIso(iso?: string | null) {
-  if (!iso) return '';
-  return /Z|[+-]\d{2}:?\d{2}$/.test(iso) ? iso : iso + 'Z';
-}

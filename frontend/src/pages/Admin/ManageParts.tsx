@@ -11,10 +11,12 @@ import {
   type ReactNode,
 } from 'react';
 import type { Part } from '../../lib/types';
-import { API, authFetch, fmtDate, money, useToast } from '../../lib/admin';
-import { ConfirmDialog, Modal, Toast } from '../../components/AdminUI';
-import '../../styles/admin.css';
+import { API } from '../../lib/api';
+import { authFetch, useToast } from '../../lib/admin';
+import { fmtDate, money } from '../../lib/format';
 import { usePageTitle } from '../../lib/usePageTitle';
+import { ConfirmDialog, Modal, SafeImg, Toast } from '../../components/AdminUI';
+import '../../styles/admin.css';
 
 type Tab = 'all' | 'add' | 'sold';
 type SortKey = 'newest' | 'oldest' | 'price-low' | 'price-high' | 'name';
@@ -99,7 +101,7 @@ async function uploadPhoto(id: number, file: File) {
   if (!res.ok) throw new Error('Photo upload failed.');
 }
 
-/* ---------- shared form fields (used by "Add part" and the Edit popup) ---------- */
+// Shared form fields (used by "Add part" and the Edit popup)
 function PartFields({ form, errors, onChange, idPrefix, showStatus }: {
   form: PartForm;
   errors: FormErrors;
@@ -162,7 +164,7 @@ function PartFields({ form, errors, onChange, idPrefix, showStatus }: {
   );
 }
 
-/* ---------- drag & drop photo picker with preview ---------- */
+// Drag & drop photo picker with preview
 function PhotoPicker({ file, onFile, onError, currentUrl, hint }: {
   file: File | null;
   onFile: (file: File | null) => void;
@@ -212,23 +214,12 @@ function PhotoPicker({ file, onFile, onError, currentUrl, hint }: {
   );
 }
 
-/* ---------- image that falls back to "No photo" if the link is missing or dead ---------- */
-function SafeImg({ src, className, fallbackClass, alt = '' }: {
-  src?: string | null;
-  className: string;
-  fallbackClass: string;
-  alt?: string;
-}) {
-  const [failed, setFailed] = useState(false);
-  if (!src || failed) return <span className={fallbackClass}>No photo</span>;
-  return <img className={className} src={src} alt={alt} onError={() => setFailed(true)} />;
-}
 
 function DetailItem({ label, children }: { label: string; children: ReactNode }) {
   return <div className="adm-detail-item"><span>{label}</span><strong>{children}</strong></div>;
 }
 
-/* ---------- compact list: tap a row to expand its full details (one at a time) ---------- */
+// Compact list: tap a row to expand its full details (one at a time)
 function PartList({ parts, expandedId, onToggle, actions, priceLabel = 'Price' }: {
   parts: Part[];
   expandedId: number | null;
@@ -306,7 +297,6 @@ function Loading({ label }: { label: string }) {
   return <div className="adm-loading"><span className="adm-spinner" /><span>{label}</span></div>;
 }
 
-/* ================================ page ================================ */
 export default function ManageParts() {
   usePageTitle('Admin · Manage parts');
   // ?tab=add opens the Add part tab directly (used by the dashboard's quick action)
@@ -315,7 +305,6 @@ export default function ManageParts() {
   const [loading, setLoading] = useState(true);
   const { toast, notify } = useToast();
 
-  // listing filters
   const [query, setQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('All');
   const [makeFilter, setMakeFilter] = useState('All');
@@ -323,24 +312,20 @@ export default function ManageParts() {
   const [soldQuery, setSoldQuery] = useState('');
   const [soldType, setSoldType] = useState<'All' | PartStatus>('All');
 
-  // add part
   const [addForm, setAddForm] = useState<PartForm>(emptyForm);
   const [addErrors, setAddErrors] = useState<FormErrors>({});
   const [addPhoto, setAddPhoto] = useState<File | null>(null);
   const [adding, setAdding] = useState(false);
 
-  // edit popup
   const [editing, setEditing] = useState<Part | null>(null);
   const [editForm, setEditForm] = useState<PartForm>(emptyForm);
   const [editErrors, setEditErrors] = useState<FormErrors>({});
   const [editPhoto, setEditPhoto] = useState<File | null>(null);
   const [savingEdit, setSavingEdit] = useState(false);
 
-  // delete confirmation
   const [toDelete, setToDelete] = useState<Part | null>(null);
   const [deleting, setDeleting] = useState(false);
 
-  // relist popup
   const [relisting, setRelisting] = useState<Part | null>(null);
   const [relistForm, setRelistForm] = useState({ price: '', condition: 'Used', description: '' });
   const [relistError, setRelistError] = useState('');
@@ -351,7 +336,6 @@ export default function ManageParts() {
   const toggleRow = (id: number) => setExpandedId(cur => (cur === id ? null : id));
   const goTab = (t: Tab) => { setTab(t); setExpandedId(null); };
 
-  // initial load
   useEffect(() => {
     let cancelled = false;
     fetchParts()
@@ -370,7 +354,6 @@ export default function ManageParts() {
     }
   }, [notify]);
 
-  /* ---------- derived data ---------- */
   const stats = useMemo(() => {
     const active = parts.filter(isActive);
     const sold = parts.filter(p => statusOf(p) === 'Sold').length;
@@ -424,7 +407,6 @@ export default function ManageParts() {
   const filtersActive = query.trim() !== '' || statusFilter !== 'All' || makeFilter !== 'All' || sort !== 'newest';
   const clearFilters = () => { setQuery(''); setStatusFilter('All'); setMakeFilter('All'); setSort('newest'); };
 
-  /* ---------- add ---------- */
   const resetAdd = () => { setAddForm(emptyForm); setAddErrors({}); setAddPhoto(null); };
 
   const submitAdd = async (e: FormEvent) => {
@@ -455,7 +437,6 @@ export default function ManageParts() {
     }
   };
 
-  /* ---------- edit ---------- */
   const openEdit = (p: Part) => { setEditing(p); setEditForm(toForm(p)); setEditErrors({}); setEditPhoto(null); };
   const closeEdit = useCallback(() => { if (!savingEdit) setEditing(null); }, [savingEdit]);
 
@@ -486,7 +467,6 @@ export default function ManageParts() {
     }
   };
 
-  /* ---------- delete ---------- */
   const confirmDelete = async () => {
     if (!toDelete) return;
     setDeleting(true);
@@ -503,7 +483,6 @@ export default function ManageParts() {
     }
   };
 
-  /* ---------- relist ---------- */
   const openRelist = (p: Part) => {
     setRelisting(p);
     setRelistForm({ price: String(p.price), condition: p.condition || 'Used', description: p.description || '' });
@@ -540,7 +519,7 @@ export default function ManageParts() {
     }
   };
 
-  /* ---------- buttons shown inside an expanded row ---------- */
+  // Buttons shown inside an expanded row
   const rowActions = (p: Part) => (
     <>
       {!isActive(p) && <button type="button" className="adm-btn primary" onClick={() => openRelist(p)}>Relist</button>}
@@ -549,7 +528,6 @@ export default function ManageParts() {
     </>
   );
 
-  /* ================================ render ================================ */
   return (
     <div className="adm">
       <header className="adm-header">
@@ -572,10 +550,9 @@ export default function ManageParts() {
         </button>
       </nav>
 
-      {/* ---------------- ALL PARTS ---------------- */}
       {tab === 'all' && (
         <>
-          <section className="adm-stats" aria-label="Inventory summary">
+          <section className={`adm-stats${loading ? ' loading' : ''}`} aria-label="Inventory summary" aria-busy={loading}>
             <div className="adm-stat"><span>Total parts</span><strong>{stats.total}</strong><small>in the system</small></div>
             <div className="adm-stat"><span>Active listings</span><strong>{stats.active}</strong><small>visible to customers</small></div>
             <div className="adm-stat"><span>Sold</span><strong>{stats.sold}</strong><small>{stats.writtenOff ? `+ ${stats.writtenOff} written off` : 'can be relisted'}</small></div>
@@ -638,7 +615,6 @@ export default function ManageParts() {
         </>
       )}
 
-      {/* ---------------- ADD PART ---------------- */}
       {tab === 'add' && (
         <section className="adm-panel">
           <div className="adm-panel-head">
@@ -670,7 +646,6 @@ export default function ManageParts() {
         </section>
       )}
 
-      {/* ---------------- SOLD ---------------- */}
       {tab === 'sold' && (
         <section className="adm-panel">
           <div className="adm-panel-head">
@@ -702,7 +677,6 @@ export default function ManageParts() {
         </section>
       )}
 
-      {/* ---------------- EDIT POPUP ---------------- */}
       {editing && (
         <Modal
           wide
@@ -741,7 +715,6 @@ export default function ManageParts() {
         </Modal>
       )}
 
-      {/* ---------------- RELIST POPUP ---------------- */}
       {relisting && (
         <Modal
           title="Relist this part?"
@@ -791,7 +764,6 @@ export default function ManageParts() {
         </Modal>
       )}
 
-      {/* ---------------- DELETE CONFIRMATION ---------------- */}
       {toDelete && (
         <ConfirmDialog
           danger

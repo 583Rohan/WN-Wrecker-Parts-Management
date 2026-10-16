@@ -2,8 +2,8 @@
 using Microsoft.IdentityModel.Tokens;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
+using System.Security.Cryptography;
 using System.Text;
-
 
 namespace WnWrecker.Api.Controllers
 {
@@ -16,11 +16,12 @@ namespace WnWrecker.Api.Controllers
         private readonly IConfiguration _config;
         public AuthController(IConfiguration config) => _config = config;
 
+        // POST /api/auth/login -> a token the admin pages send with every request (valid 8 hours)
         [HttpPost("login")]
         public IActionResult Login(LoginRequest login)
         {
-            if (login.Username != _config["AdminCredentials:Username"] ||
-                login.Password != _config["AdminCredentials:Password"])
+            if (!Matches(login.Username, _config["AdminCredentials:Username"]) ||
+                !Matches(login.Password, _config["AdminCredentials:Password"]))
                 return Unauthorized();
 
             var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_config["Jwt:Key"]!));
@@ -33,5 +34,10 @@ namespace WnWrecker.Api.Controllers
 
             return Ok(new { token = new JwtSecurityTokenHandler().WriteToken(token) });
         }
+
+        // compares in constant time, so response timing doesn't hint at how much of a guess was right
+        private static bool Matches(string? given, string? expected) =>
+            given != null && expected != null &&
+            CryptographicOperations.FixedTimeEquals(Encoding.UTF8.GetBytes(given), Encoding.UTF8.GetBytes(expected));
     }
 }

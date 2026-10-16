@@ -1,4 +1,4 @@
-const API = import.meta.env.VITE_API_URL;
+import { API } from './api';
 
 // The chat only lasts for this browser tab/session (closing the tab or browser ends it).
 // The customer gets a short reference code (e.g. WN-7F3K2) to rejoin the same chat later.
@@ -16,7 +16,7 @@ export function getChatSession(): { token: string | null; reference: string | nu
   }
 }
 
-export function saveChatSession(token: string, reference: string | null) {
+function saveChatSession(token: string, reference: string | null) {
   try {
     sessionStorage.setItem(TOKEN_KEY, token);
     if (reference) sessionStorage.setItem(REF_KEY, reference);
@@ -70,7 +70,7 @@ export async function rejoinConversation(code: string): Promise<{ token: string;
   return { token: data.token as string, reference: (data.reference as string) ?? null };
 }
 
-export async function attachPart(token: string, partId: number) {
+async function attachPart(token: string, partId: number) {
   await fetch(`${API}/api/chat/${token}/parts`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ partId }) });
 }
 export async function sendChatMessage(token: string, text: string) {

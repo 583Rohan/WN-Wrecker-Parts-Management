@@ -2,9 +2,8 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace WnWrecker.Api.Controllers
 {
-    // Public business details (name, address, phone, email, hours, ABN).
-    // They live in ONE place — the "Business" section of appsettings.json — and the website
-    // reads them from here, so changing them there updates the whole site, the invoices and the chat bot.
+    // Public business details from the "Business" section of appsettings.json. Changing them there
+    // updates the website, the invoices and the chat bot.
     [ApiController]
     [Route("api/business")]
     public class BusinessController : ControllerBase

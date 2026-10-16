@@ -30,6 +30,10 @@ namespace WnWrecker.Api.Services
             : NeedsReply(c) ? StatusNeedsReply
             : StatusWaiting;
 
+        // "$250" for whole dollars, "$22.73" with cents (same format as the website)
+        public static string Money(decimal value) =>
+            value == decimal.Truncate(value) ? $"${value:N0}" : $"${value:N2}";
+
         // e.g. "WN-7F3K2"
         public static async Task<string> NewReferenceCode(AppDbContext db)
         {

@@ -6,16 +6,20 @@ import { enquireAboutParts, openChat } from '../lib/chat';
 import { isForSale, statusLabel } from '../lib/parts';
 import { money } from '../lib/format';
 import { usePageTitle } from '../lib/usePageTitle';
+import { API } from '../lib/api';
 import { PartPhoto } from '../components/PartCard';
 
-const API = import.meta.env.VITE_API_URL;
-
-export default function PartDetail() {
+// keyed by id so moving from one part to another starts with fresh state
+export default function PartDetailRoute() {
   const { id } = useParams();
+  return <PartDetail key={id} id={id} />;
+}
+
+function PartDetail({ id }: { id?: string }) {
   const [part, setPart] = useState<Part | null>(null);
   const [notFound, setNotFound] = useState(false);
   const [added, setAdded] = useState(false);
-  usePageTitle(part ? `${part.name} — ${part.make} ${part.model}` : 'Part');
+  usePageTitle(part ? `${part.name} — ${part.make} ${part.model}` : notFound ? 'Part not found' : 'Part');
 
   useEffect(() => {
     let alive = true;
@@ -60,8 +64,8 @@ export default function PartDetail() {
           <div className="pd-grid" aria-label="Loading part">
             <div className="photo pd-photo skeleton" />
             <div className="panel">
-              <div className="skeleton skeleton-line short" style={{ height: 22 }} />
-              <div className="skeleton skeleton-line" style={{ height: 34, width: '40%', marginTop: 18 }} />
+              <div className="skeleton skeleton-line short tall" />
+              <div className="skeleton skeleton-line pd-skeleton-price" />
               <div className="skeleton skeleton-line" />
               <div className="skeleton skeleton-line short" />
               <div className="skeleton skeleton-line short" />
@@ -94,7 +98,7 @@ export default function PartDetail() {
               <dt>Year</dt><dd>{part.year}</dd>
               <dt>Condition</dt><dd>{part.condition}</dd>
             </dl>
-            {part.description && <p className="muted" style={{ lineHeight: 1.6, margin: '0 0 20px' }}>{part.description}</p>}
+            {part.description && <p className="muted pd-description">{part.description}</p>}
 
             {available ? (
               <div className="pd-actions">

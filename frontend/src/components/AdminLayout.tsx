@@ -1,15 +1,15 @@
 import { useEffect, useState } from 'react';
 import { Link, NavLink, Outlet } from 'react-router-dom';
-import { ConfirmDialog } from './AdminUI';
-import AdminLogin from './AdminLogin';
 import { startPolling } from '../lib/poll';
 import { useScrolled } from '../lib/useScrolled';
+import { useScrollToTop } from '../lib/useScrollToTop';
+import { API } from '../lib/api';
+import { ConfirmDialog } from './AdminUI';
+import AdminLogin from './AdminLogin';
 import '../styles/admin.css';
 
-const API = import.meta.env.VITE_API_URL;
 const ADMIN_TOKEN_KEY = 'wnwrecker_admin_token';
 
-// same "current page" highlight as the customer site
 const linkStyle = ({ isActive }: { isActive: boolean }) => ({
   color: isActive ? 'var(--accent)' : undefined,
   fontWeight: isActive ? 700 : 400,
@@ -21,6 +21,7 @@ export default function AdminLayout() {
   const [confirmLogout, setConfirmLogout] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const scrolled = useScrolled();
+  useScrollToTop();
 
   // badge on "Chats" = customers waiting for a reply (refreshes every 15s, or right after a reply)
   useEffect(() => {

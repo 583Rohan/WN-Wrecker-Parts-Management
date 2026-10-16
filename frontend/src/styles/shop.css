@@ -1,0 +1,24 @@
+/* Shop page (the shared page header, glass panel, cards and states are in index.css) */
+.shop-controls { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(0, .6fr) minmax(0, .6fr) auto; gap: 14px; align-items: end; border-left: 4px solid var(--c-amber); }
+.shop-search { position: relative; }
+.shop-search svg { position: absolute; left: 14px; top: 50%; width: 18px; height: 18px; transform: translateY(-50%); color: #778397; pointer-events: none; }
+.shop-search .input { padding-left: 42px; padding-right: 40px; }
+.shop-search-clear { position: absolute; top: 50%; right: 10px; width: 28px; height: 28px; border: 0; border-radius: 50%; color: var(--c-muted); background: #edf1f5; transform: translateY(-50%); cursor: pointer; }
+.shop-clear { color: #fff; background: rgba(255,255,255,.06); border-color: rgba(255,255,255,.22); }
+.shop-clear:hover { background: rgba(245,163,19,.14); border-color: var(--c-amber); }
+.shop-clear:disabled:hover { background: rgba(255,255,255,.06); border-color: rgba(255,255,255,.22); }
+.shop-summary { margin-bottom: 20px; display: flex; justify-content: space-between; align-items: flex-end; gap: 20px; }
+.shop-summary .section-title { margin-bottom: 4px; }
+.shop-summary .muted { margin: 0; font-size: .85rem; }
+.shop-active-filter { padding: 7px 12px; border-radius: 999px; color: #8a5200; background: #fff1ce; font-size: .75rem; font-weight: 800; }
+.shop-more { margin-top: 28px; display: grid; justify-items: center; gap: 10px; }
+.shop-more .muted { margin: 0; font-size: .85rem; }
+.shop-more .btn { min-width: 200px; }
+
+@media (max-width: 1050px) {
+  .shop-controls { grid-template-columns: 1fr 1fr; }
+}
+@media (max-width: 760px) {
+  .shop-controls { grid-template-columns: 1fr; }
+  .shop-summary { flex-direction: column; align-items: flex-start; }
+}

@@ -2,10 +2,9 @@ import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { clearChatSession, getChatSession, rejoinConversation, startConversation } from '../lib/chat';
 import { startPolling } from '../lib/poll';
 import { useBusiness } from '../lib/business';
-import { money } from '../lib/format';
+import { fmtTime, money } from '../lib/format';
+import { API, invoicePdfUrl } from '../lib/api';
 import '../styles/chat-widget.css';
-
-const API = import.meta.env.VITE_API_URL;
 
 type ChatInvoice = { number: string; title: string | null; total: number; status: string; publicToken: string | null };
 type ChatMessage = { id?: number; sender: string; text: string; sentAt: string; kind?: string; invoice?: ChatInvoice | null };
@@ -21,17 +20,6 @@ type ChatData = {
 
 const emptyChat: ChatData = { reference: null, handedOff: false, closed: false, closedBy: null, name: null, contact: null, messages: [] };
 
-function fmtTime(iso: string) {
-  if (!iso) return '';
-  // backend sends UTC without a 'Z' — add one so it isn't read as local time
-  const norm = /Z|[+-]\d{2}:?\d{2}$/.test(iso) ? iso : iso + 'Z';
-  const d = new Date(norm);
-  return isNaN(d.getTime()) ? '' : d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
-}
-
-const invoiceUrl = (token: string | null, download = false) =>
-  token ? `${API}/api/invoices/p/${token}/pdf${download ? '?download=true' : ''}` : '#';
-
 export default function ChatWidget() {
   const { name: businessName } = useBusiness();
   const [open, setOpen] = useState(false);
@@ -44,13 +32,12 @@ export default function ChatWidget() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
 
-  // rejoin with a reference code
   const [rejoinOpen, setRejoinOpen] = useState(false);
   const [rejoinCode, setRejoinCode] = useState('');
 
   // optional name / contact card (shown when a person joins)
-  const [askDetails, setAskDetails] = useState(false);       // opened by "Talk to a person"
-  const [detailsDone, setDetailsDone] = useState(false);     // saved or skipped this session
+  const [askDetails, setAskDetails] = useState(false);
+  const [detailsDone, setDetailsDone] = useState(false);   // saved or skipped this session
   const [detailName, setDetailName] = useState('');
   const [detailContact, setDetailContact] = useState('');
 
@@ -98,7 +85,7 @@ export default function ChatWidget() {
           });
         })
         .catch(() => { /* offline for a moment — try again next time */ });
-    // refresh every 3s while the chat is open (never overlapping, paused while the tab is hidden)
+    // refresh every 3s while the chat is open
     const stop = startPolling(load, 3000);
     return () => { alive = false; stop(); };
   }, [open, token]);
@@ -296,8 +283,8 @@ export default function ChatWidget() {
                     <em className={`cw-inv-status ${m.invoice.status.toLowerCase()}`}>{m.invoice.status}</em>
                   </div>
                   <div className="cw-row">
-                    <a className="cw-btn ghost" href={invoiceUrl(m.invoice.publicToken)} target="_blank" rel="noreferrer">View</a>
-                    <a className="cw-btn" href={invoiceUrl(m.invoice.publicToken, true)} target="_blank" rel="noreferrer">Download</a>
+                    <a className="cw-btn ghost" href={invoicePdfUrl(m.invoice.publicToken)} target="_blank" rel="noreferrer">View</a>
+                    <a className="cw-btn" href={invoicePdfUrl(m.invoice.publicToken, true)} target="_blank" rel="noreferrer">Download</a>
                   </div>
                 </div>
               ) : (

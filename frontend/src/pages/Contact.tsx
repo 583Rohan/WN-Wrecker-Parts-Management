@@ -1,16 +1,17 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { useLocation } from 'react-router-dom';
-import { hasEmail, phoneHref, useBusiness } from '../lib/business';
+import { phoneHref, useBusiness } from '../lib/business';
 import { ensureConversation, openChat, requestHuman, saveChatDetails, sendChatMessage } from '../lib/chat';
 import { usePageTitle } from '../lib/usePageTitle';
+import { isEmail } from '../lib/format';
 
 export default function Contact() {
   usePageTitle('Contact');
-  const business = useBusiness();   // all details come from appsettings.json → "Business"
+  const business = useBusiness();
   const location = useLocation();
   const requestRef = useRef<HTMLElement>(null);
 
-  // part request form — sent to the team as a chat, so they can reply straight away
+  // the request is sent to the team as a chat, so they can reply straight away
   const [part, setPart] = useState('');
   const [vehicle, setVehicle] = useState('');
   const [name, setName] = useState('');
@@ -66,20 +67,20 @@ export default function Contact() {
       <div className="page-body">
         <div className="contact-grid">
           <aside className="panel accent">
-            <h2 className="section-title" style={{ fontSize: '1.4rem' }}>Find us</h2>
+            <h2 className="section-title small">Find us</h2>
             <ul className="contact-list">
               {business.address && <li><span>Address</span>{business.address}</li>}
               {business.phone && <li><span>Phone</span>{phoneHref(business.phone) ? <a href={phoneHref(business.phone)}>{business.phone}</a> : business.phone}</li>}
-              {business.email && <li><span>Email</span>{hasEmail(business.email) ? <a href={`mailto:${business.email}`}>{business.email}</a> : business.email}</li>}
+              {business.email && <li><span>Email</span>{isEmail(business.email) ? <a href={`mailto:${business.email}`}>{business.email}</a> : business.email}</li>}
               {hoursLines.length > 0 && <li><span>Hours</span>{hoursLines.map(line => <div key={line}>{line}</div>)}</li>}
               {business.abn && <li><span>ABN</span>{business.abn}</li>}
             </ul>
-            <button className="btn" style={{ marginTop: 20, width: '100%' }} onClick={openChat}>Message us</button>
+            <button className="btn contact-cta" onClick={openChat}>Message us</button>
           </aside>
 
-          <section id="request" ref={requestRef} className="panel" style={{ scrollMarginTop: 80 }}>
-            <h2 className="section-title" style={{ fontSize: '1.4rem', marginBottom: 6 }}>Request a part</h2>
-            <p className="muted" style={{ marginTop: 0, lineHeight: 1.6 }}>Can't find what you need? Tell us the part and your vehicle — we'll check current and upcoming stock and reply in the chat.</p>
+          <section id="request" ref={requestRef} className="panel">
+            <h2 className="section-title small">Request a part</h2>
+            <p className="muted panel-intro">Can't find what you need? Tell us the part and your vehicle — we'll check current and upcoming stock and reply in the chat.</p>
 
             {result === 'sent' && <div className="notice ok">Request sent! Our team will reply in the chat window. Keep your reference code to come back to it later.</div>}
             {result === 'error' && <div className="notice err">Couldn't send your request. Please try again, or use the chat.</div>}

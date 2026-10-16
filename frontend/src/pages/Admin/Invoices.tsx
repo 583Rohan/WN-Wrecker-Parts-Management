@@ -1,27 +1,24 @@
 import { Fragment, useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import type { Part } from '../../lib/types';
-import { API, authFetch, fmtDate, money, useToast } from '../../lib/admin';
+import { API, invoicePdfUrl } from '../../lib/api';
+import { authFetch, useToast } from '../../lib/admin';
+import { apiTime, fmtDate, isEmail, money } from '../../lib/format';
 import {
-  downloadInvoicePdf, fetchInvoices, fetchParts, invoiceLink, invoiceShareMessage, isEmail, readError, toIso,
+  downloadInvoicePdf, fetchInvoices, fetchParts, invoiceShareMessage, readError,
   type Invoice, type InvoiceStatus,
 } from '../../lib/invoices';
-import { ConfirmDialog, Modal, Toast } from '../../components/AdminUI';
+import { useBusiness } from '../../lib/business';
+import { usePageTitle } from '../../lib/usePageTitle';
+import { ConfirmDialog, InvoiceStatusBadge, Modal, Toast } from '../../components/AdminUI';
 import InvoiceEditor, { Totals } from '../../components/InvoiceEditor';
 import SharePanel from '../../components/SharePanel';
-import { useBusiness } from '../../lib/business';
 import '../../styles/admin.css';
-import { usePageTitle } from '../../lib/usePageTitle';
 
-/* ================================ types ================================ */
 type Tab = 'all' | 'new';
 type SortKey = 'newest' | 'oldest' | 'amount-high' | 'amount-low';
 type DateFilter = 'all' | '7' | '30' | 'month';
 type PendingAction = { kind: 'paid' | 'unpaid' | 'void'; inv: Invoice };
 
-const STATUS_CLASS: Record<InvoiceStatus, string> = { Unpaid: 'unpaid', Paid: 'paid', Void: 'void', Refunded: 'refunded' };
-function StatusBadge({ status }: { status: InvoiceStatus }) {
-  return <span className={`adm-badge ${STATUS_CLASS[status] ?? 'void'}`}>{status}</span>;
-}
 
 function DetailItem({ label, children }: { label: string; children: ReactNode }) {
   return <div className="adm-detail-item"><span>{label}</span><strong>{children}</strong></div>;
@@ -36,7 +33,7 @@ function InvoiceShare({ inv, notify, extra }: { inv: Invoice; notify: (t: string
   const { name: businessName } = useBusiness();
   return (
     <SharePanel
-      link={invoiceLink(inv.publicToken)}
+      link={invoicePdfUrl(inv.publicToken)}
       title={`Invoice ${inv.number}`}
       message={invoiceShareMessage(inv, businessName)}
       emailTo={isEmail(inv.customerContact) ? inv.customerContact!.trim() : null}
@@ -49,7 +46,7 @@ function InvoiceShare({ inv, notify, extra }: { inv: Invoice; notify: (t: string
   );
 }
 
-/* ---------- compact invoice list, tap a row to expand (one at a time) ---------- */
+// Compact invoice list, tap a row to expand (one at a time)
 function InvoiceList({ invoices, expandedId, onToggle, actions }: {
   invoices: Invoice[];
   expandedId: number | null;
@@ -80,7 +77,7 @@ function InvoiceList({ invoices, expandedId, onToggle, actions }: {
                     <div className="adm-sub">{inv.number}{inv.title ? ` · ${inv.customerName}` : ''} · {fmtDate(inv.createdAt)} · {inv.items.length} item{inv.items.length === 1 ? '' : 's'}</div>
                   </td>
                   <td><span className={cancelled ? 'adm-strike' : 'adm-price'}>{money(Number(inv.total))}</span></td>
-                  <td><StatusBadge status={inv.status} /></td>
+                  <td><InvoiceStatusBadge status={inv.status} /></td>
                   <td className="adm-chevron-cell"><span className={`adm-chevron${open ? ' open' : ''}`} aria-hidden="true">▾</span></td>
                 </tr>
                 {open && (
@@ -133,7 +130,6 @@ function InvoiceList({ invoices, expandedId, onToggle, actions }: {
   );
 }
 
-/* ================================ page ================================ */
 export default function Invoices() {
   usePageTitle('Admin · Invoices');
   // dashboard links: ?tab=new, ?status=Unpaid, ?open=<invoice id>
@@ -144,7 +140,6 @@ export default function Invoices() {
   const [editorKey, setEditorKey] = useState(0);
   const { toast, notify } = useToast();
 
-  // list filters
   const [query, setQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'All' | InvoiceStatus>(() => {
     const s = new URLSearchParams(window.location.search).get('status');
@@ -156,7 +151,6 @@ export default function Invoices() {
   const toggleRow = (id: number) => setExpandedId(cur => (cur === id ? null : id));
   const goTab = (t: Tab) => { setTab(t); setExpandedId(null); };
 
-  // popups
   const [created, setCreated] = useState<Invoice | null>(null);
   const [sharing, setSharing] = useState<Invoice | null>(null);
   const [pending, setPending] = useState<PendingAction | null>(null);
@@ -164,7 +158,7 @@ export default function Invoices() {
   const [choices, setChoices] = useState<Record<number, 'stock' | 'writeoff'>>({});
   const [acting, setActing] = useState(false);
 
-  /* ---------- loading ---------- */
+  // Loading
   useEffect(() => {
     let cancelled = false;
     Promise.all([fetchInvoices(), fetchParts()])
@@ -189,18 +183,17 @@ export default function Invoices() {
     }
   }, [notify]);
 
-  /* ---------- derived data ---------- */
   const stats = useMemo(() => {
     const now = new Date();
     const sum = (list: Invoice[]) => list.reduce((s, i) => s + Number(i.total || 0), 0);
     const unpaid = invoices.filter(i => i.status === 'Unpaid');
     const paid = invoices.filter(i => i.status === 'Paid');
     const paidThisMonth = paid.filter(i => {
-      const d = new Date(toIso(i.paidAt));
+      const d = new Date(apiTime(i.paidAt));
       return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
     });
     const oldest = [...unpaid].sort((a, b) => a.id - b.id)[0] ?? null;
-    const oldestDays = oldest ? Math.max(0, Math.floor((now.getTime() - new Date(toIso(oldest.createdAt)).getTime()) / 86_400_000)) : 0;
+    const oldestDays = oldest ? Math.max(0, Math.floor((now.getTime() - apiTime(oldest.createdAt)) / 86_400_000)) : 0;
     return {
       oldest,
       oldestDays,
@@ -220,7 +213,7 @@ export default function Invoices() {
     const list = invoices.filter(inv => {
       if (statusFilter !== 'All' && inv.status !== statusFilter) return false;
       if (dateFilter !== 'all') {
-        const d = new Date(toIso(inv.createdAt));
+        const d = new Date(apiTime(inv.createdAt));
         if (dateFilter === 'month') {
           if (d.getMonth() !== now.getMonth() || d.getFullYear() !== now.getFullYear()) return false;
         } else if (now.getTime() - d.getTime() > Number(dateFilter) * 86_400_000) return false;
@@ -241,7 +234,7 @@ export default function Invoices() {
   const filtersActive = query.trim() !== '' || statusFilter !== 'All' || dateFilter !== 'all' || sort !== 'newest';
   const clearFilters = () => { setQuery(''); setStatusFilter('All'); setDateFilter('all'); setSort('newest'); };
 
-  /* ---------- after the New invoice form creates one ---------- */
+  // After the New invoice form creates one
   const handleCreated = async (inv: Invoice) => {
     await reload();
     setEditorKey(k => k + 1);
@@ -250,7 +243,7 @@ export default function Invoices() {
     setCreated(inv);
   };
 
-  /* ---------- status changes ---------- */
+  // Status changes
   const runAction = async (inv: Invoice, path: string, body: unknown, success: string) => {
     setActing(true);
     try {
@@ -308,7 +301,6 @@ export default function Invoices() {
 
   const partNames = (inv: Invoice) => inv.items.filter(i => i.partId !== null).map(i => i.description);
 
-  /* ================================ render ================================ */
   return (
     <div className="adm">
       <header className="adm-header">
@@ -328,10 +320,9 @@ export default function Invoices() {
         </button>
       </nav>
 
-      {/* ---------------- ALL INVOICES ---------------- */}
       {tab === 'all' && (
         <>
-          <section className="adm-stats" aria-label="Invoice summary">
+          <section className={`adm-stats${loading ? ' loading' : ''}`} aria-label="Invoice summary" aria-busy={loading}>
             <div className="adm-stat"><span>Outstanding</span><strong>{money(stats.unpaidSum)}</strong><small>{stats.unpaidCount} unpaid invoice{stats.unpaidCount === 1 ? '' : 's'}</small></div>
             <div className="adm-stat"><span>Collected</span><strong>{money(stats.paidSum)}</strong><small>{money(stats.monthSum)} this month · {stats.paidCount} paid</small></div>
             <div className="adm-stat">
@@ -399,7 +390,6 @@ export default function Invoices() {
         </>
       )}
 
-      {/* ---------------- NEW INVOICE ---------------- */}
       {tab === 'new' && (
         <section className="adm-panel">
           <div className="adm-panel-head">
@@ -422,7 +412,6 @@ export default function Invoices() {
         </section>
       )}
 
-      {/* ---------------- INVOICE CREATED ---------------- */}
       {created && (
         <Modal
           wide
@@ -452,7 +441,6 @@ export default function Invoices() {
         </Modal>
       )}
 
-      {/* ---------------- SHARE ---------------- */}
       {sharing && (
         <Modal
           wide
@@ -466,7 +454,6 @@ export default function Invoices() {
         </Modal>
       )}
 
-      {/* ---------------- PAID / UNPAID / VOID CONFIRMATION ---------------- */}
       {pending && (
         <ConfirmDialog
           danger={pending.kind === 'void'}
@@ -491,7 +478,6 @@ export default function Invoices() {
         />
       )}
 
-      {/* ---------------- REFUND & VOID ---------------- */}
       {refunding && (
         <Modal
           title={`Refund & void ${refunding.number}?`}

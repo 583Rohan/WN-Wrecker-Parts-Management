@@ -6,9 +6,9 @@ export default function NotFound() {
   return (
     <div className="not-found">
       <strong>404</strong>
-      <h1 className="section-title" style={{ marginTop: 12 }}>Page not found</h1>
-      <p className="muted" style={{ margin: '0 0 22px' }}>That page doesn't exist or has moved.</p>
-      <div className="pd-actions" style={{ justifyContent: 'center' }}>
+      <h1 className="section-title">Page not found</h1>
+      <p className="muted">That page doesn't exist or has moved.</p>
+      <div className="pd-actions">
         <Link to="/" className="btn">Go home</Link>
         <Link to="/parts" className="btn btn-outline">Browse parts</Link>
       </div>

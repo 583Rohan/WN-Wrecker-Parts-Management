@@ -1,12 +1,12 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import type { ToastState } from '../lib/admin';
+import type { InvoiceStatus } from '../lib/invoices';
 
-// open popups, newest last — Escape only closes the top one
+// popups that are open, newest last, so Escape only closes the top one
 const openModals: number[] = [];
 let modalSeq = 0;
 
-// Reusable popup window used across the admin pages (rendered on top of the page, so popups can stack)
 export function Modal({ title, subtitle, onClose, children, footer, wide }: {
   title: string;
   subtitle?: string;
@@ -50,7 +50,6 @@ export function Modal({ title, subtitle, onClose, children, footer, wide }: {
   );
 }
 
-// Yes/No confirmation popup (e.g. before deleting)
 export function ConfirmDialog({ title, message, confirmLabel = 'Confirm', danger, busy, onConfirm, onCancel }: {
   title: string;
   message: ReactNode;
@@ -78,7 +77,6 @@ export function ConfirmDialog({ title, message, confirmLabel = 'Confirm', danger
   );
 }
 
-// Small auto-dismissing message in the bottom-right corner
 export function Toast({ toast }: { toast: ToastState }) {
   if (!toast) return null;
   return createPortal(
@@ -90,7 +88,7 @@ export function Toast({ toast }: { toast: ToastState }) {
   );
 }
 
-// Image that shows a "No photo" box if the link is missing or broken
+// image with a "No photo" box when the link is missing or broken
 export function SafeImg({ src, className, fallbackClass, alt = '' }: {
   src?: string | null;
   className: string;
@@ -100,4 +98,10 @@ export function SafeImg({ src, className, fallbackClass, alt = '' }: {
   const [failed, setFailed] = useState(false);
   if (!src || failed) return <span className={fallbackClass}>No photo</span>;
   return <img className={className} src={src} alt={alt} onError={() => setFailed(true)} />;
+}
+
+const INVOICE_BADGE: Record<InvoiceStatus, string> = { Unpaid: 'unpaid', Paid: 'paid', Void: 'void', Refunded: 'refunded' };
+
+export function InvoiceStatusBadge({ status }: { status: InvoiceStatus }) {
+  return <span className={`adm-badge ${INVOICE_BADGE[status] ?? 'void'}`}>{status}</span>;
 }

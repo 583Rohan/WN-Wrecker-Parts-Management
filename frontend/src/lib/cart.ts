@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 
-export type CartItem = { id: number; name: string; make: string; model: string; year: number; price: number; photoUrl?: string | null };
+type CartItem = { id: number; name: string; make: string; model: string; year: number; price: number; photoUrl?: string | null };
 const KEY = 'wnwrecker_cart';
 const EVT = 'wn-cart-changed';
 

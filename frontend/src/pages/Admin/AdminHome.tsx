@@ -1,13 +1,13 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { API, authFetch, fmtDate, money, useToast } from '../../lib/admin';
-import { toIso } from '../../lib/invoices';
-import { Toast } from '../../components/AdminUI';
+import { API } from '../../lib/api';
+import { authFetch, useToast } from '../../lib/admin';
+import { fmtDate, money, timeAgo } from '../../lib/format';
 import { startPolling } from '../../lib/poll';
-import '../../styles/admin.css';
 import { usePageTitle } from '../../lib/usePageTitle';
+import { InvoiceStatusBadge, Toast } from '../../components/AdminUI';
+import '../../styles/admin.css';
 
-/* ================================ types ================================ */
 type InvoiceStatus = 'Unpaid' | 'Paid' | 'Void' | 'Refunded';
 
 type Stats = {
@@ -29,25 +29,12 @@ type Stats = {
   recentInvoices: { id: number; number: string; title: string | null; customerName: string; total: number; status: InvoiceStatus; createdAt: string }[];
 };
 
-/* ================================ helpers ================================ */
-function timeAgo(iso: string) {
-  const d = new Date(toIso(iso));
-  const mins = Math.floor((Date.now() - d.getTime()) / 60000);
-  if (mins < 1) return 'just now';
-  if (mins < 60) return `${mins}m ago`;
-  const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return `${hrs}h ago`;
-  if (hrs < 48) return 'yesterday';
-  return d.toLocaleDateString('en-AU', { day: 'numeric', month: 'short' });
-}
-
 const greeting = () => {
   const h = new Date().getHours();
   return h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening';
 };
 
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
-const STATUS_CLASS: Record<InvoiceStatus, string> = { Unpaid: 'unpaid', Paid: 'paid', Void: 'void', Refunded: 'refunded' };
 
 async function fetchStats(): Promise<Stats> {
   const res = await authFetch(`${API}/api/admin/stats`);
@@ -55,7 +42,6 @@ async function fetchStats(): Promise<Stats> {
   return res.json();
 }
 
-/* ================================ page ================================ */
 export default function AdminHome() {
   usePageTitle('Admin · Dashboard');
   const navigate = useNavigate();
@@ -93,7 +79,6 @@ export default function AdminHome() {
   const thisMonth = stats?.salesByMonth[stats.salesByMonth.length - 1]?.month;
   const partPct = (n: number) => (stats && stats.parts.total ? Math.round((n / stats.parts.total) * 100) : 0);
 
-  /* ================================ render ================================ */
   return (
     <div className="adm">
       <header className="adm-header">
@@ -122,9 +107,8 @@ export default function AdminHome() {
         )
       ) : (
         <>
-          {/* ---------------- needs attention ---------------- */}
           <section className="adm-attn" aria-label="Needs attention">
-            <Link to="/admin/chats" className={`adm-attn-card${stats.chats.needsReply ? ' alert' : ' ok'}`}>
+            <Link to={stats.chats.needsReply ? '/admin/chats?filter=needs' : '/admin/chats'} className={`adm-attn-card${stats.chats.needsReply ? ' alert' : ' ok'}`}>
               <span className="adm-attn-icon" aria-hidden="true">💬</span>
               <div>
                 <strong>{stats.chats.needsReply ? plural(stats.chats.needsReply, 'chat') + ' need a reply' : 'All chats answered'}</strong>
@@ -146,7 +130,6 @@ export default function AdminHome() {
             </Link>
           </section>
 
-          {/* ---------------- quick actions ---------------- */}
           <div className="adm-quick">
             <Link to="/admin/parts?tab=add" className="adm-btn primary">＋ Add a part</Link>
             <Link to="/admin/invoices?tab=new" className="adm-btn">＋ New invoice</Link>
@@ -154,7 +137,6 @@ export default function AdminHome() {
             <Link to="/admin/parts" className="adm-btn">Manage parts</Link>
           </div>
 
-          {/* ---------------- key numbers ---------------- */}
           <section className="adm-stats" aria-label="Key numbers">
             <div className="adm-stat"><span>Collected this month</span><strong>{money(stats.invoices.collectedThisMonth)}</strong><small>{plural(stats.invoices.paidThisMonth, 'paid invoice')}</small></div>
             <div className="adm-stat"><span>Collected all time</span><strong>{money(stats.invoices.collected)}</strong><small>{plural(stats.invoices.paidCount, 'paid invoice')}</small></div>
@@ -162,7 +144,6 @@ export default function AdminHome() {
             <div className="adm-stat"><span>Open chats</span><strong>{stats.chats.open}</strong><small>{stats.chats.needsReply} need reply · {stats.chats.waiting} waiting</small></div>
           </section>
 
-          {/* ---------------- lists ---------------- */}
           <div className="adm-dash-grid">
             <section className="adm-panel">
               <div className="adm-panel-head">
@@ -213,7 +194,7 @@ export default function AdminHome() {
                       </span>
                       <span className="adm-dash-side">
                         <span className={i.status === 'Void' || i.status === 'Refunded' ? 'adm-strike' : 'adm-price'}>{money(Number(i.total))}</span>
-                        <span className={`adm-badge ${STATUS_CLASS[i.status] ?? 'void'}`}>{i.status}</span>
+                        <InvoiceStatusBadge status={i.status} />
                       </span>
                     </button>
                   ))}
@@ -222,7 +203,6 @@ export default function AdminHome() {
             </section>
           </div>
 
-          {/* ---------------- sales + inventory ---------------- */}
           <div className="adm-dash-grid">
             <section className="adm-panel">
               <div className="adm-panel-head">

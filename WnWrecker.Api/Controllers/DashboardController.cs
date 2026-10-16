@@ -22,13 +22,13 @@ namespace WnWrecker.Api.Controllers
         {
             var now = DateTime.UtcNow;
 
-            // ---------------- parts ----------------
+            // parts
             var parts = await _db.Parts.AsNoTracking()
                 .Select(p => new { p.Status, p.Price, p.Make })
                 .ToListAsync();
             var inStock = parts.Where(p => p.Status == "In Stock").ToList();
 
-            // ---------------- chats (same "needs reply" rule as the Chats page) ----------------
+            // chats (same "needs reply" rule as the Chats page)
             var openChats = await _db.Conversations.AsNoTracking()
                 .Where(c => !c.Archived)
                 .OrderByDescending(c => c.LastMessageAt)
@@ -54,7 +54,7 @@ namespace WnWrecker.Api.Controllers
             var needsReply = openChats.Where(c => c.LastHumanSender == null || c.LastHumanSender == "customer").ToList();
             var closedChats = await _db.Conversations.CountAsync(c => c.Archived);
 
-            // ---------------- invoices ----------------
+            // invoices
             var invoices = await _db.Invoices.AsNoTracking()
                 .Select(i => new { i.Id, i.Number, i.Title, i.CustomerName, i.Total, i.Status, i.CreatedAt, i.PaidAt })
                 .ToListAsync();

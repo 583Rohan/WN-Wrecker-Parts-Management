@@ -1,6 +1,4 @@
 import { Routes, Route } from 'react-router-dom';
-import CustomerLayout from './components/CustomerLayout';
-import AdminLayout from './components/AdminLayout';
 import Home from './pages/Home';
 import Parts from './pages/Parts';
 import PartDetail from './pages/PartDetail';
@@ -13,6 +11,8 @@ import AdminHome from './pages/Admin/AdminHome';
 import ManageParts from './pages/Admin/ManageParts';
 import ChatManagement from './pages/Admin/ChatManagement';
 import Invoices from './pages/Admin/Invoices';
+import CustomerLayout from './components/CustomerLayout';
+import AdminLayout from './components/AdminLayout';
 
 function App() {
   return (

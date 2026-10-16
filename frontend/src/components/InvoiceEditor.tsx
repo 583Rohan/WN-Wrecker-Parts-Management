@@ -1,7 +1,10 @@
 import { useMemo, useState, type FormEvent } from 'react';
 import type { Part } from '../lib/types';
-import { API, authFetch, money } from '../lib/admin';
-import { forSale, gstSplit, heldByMap, partLabel, readError, type Invoice } from '../lib/invoices';
+import { API } from '../lib/api';
+import { authFetch } from '../lib/admin';
+import { money } from '../lib/format';
+import { isForSale } from '../lib/parts';
+import { gstSplit, heldByMap, partLabel, readError, type Invoice } from '../lib/invoices';
 import { Modal, SafeImg } from './AdminUI';
 
 // The "new invoice" form. Used on the Invoices page (New invoice tab) and in the
@@ -25,7 +28,7 @@ export function Totals({ subtotal, gst, total }: { subtotal: number; gst: number
   );
 }
 
-/* ---------- searchable picker for in-stock parts ---------- */
+// Searchable picker for in-stock parts
 function PartPicker({ parts, takenIds, heldBy, onPick }: {
   parts: Part[];
   takenIds: Set<number>;
@@ -38,7 +41,7 @@ function PartPicker({ parts, takenIds, heldBy, onPick }: {
   const results = useMemo(() => {
     const term = query.trim().toLowerCase();
     return parts
-      .filter(p => forSale(p) && !takenIds.has(p.id))
+      .filter(p => isForSale(p) && !takenIds.has(p.id))
       .filter(p => !term || `${p.name} ${p.make} ${p.model} ${p.year}`.toLowerCase().includes(term))
       .slice(0, 8);
   }, [parts, takenIds, query]);
@@ -101,7 +104,7 @@ export default function InvoiceEditor({
   initialContact?: string;
   initialPartIds?: number[];                 // e.g. the parts the customer asked about in the chat
 }) {
-  const startLines = () => parts.filter(p => initialPartIds.includes(p.id) && forSale(p)).map(partLine);
+  const startLines = () => parts.filter(p => initialPartIds.includes(p.id) && isForSale(p)).map(partLine);
 
   const [title, setTitle] = useState('');
   const [customerName, setCustomerName] = useState(initialName);
@@ -208,7 +211,7 @@ export default function InvoiceEditor({
         <div className="adm-lines-empty">No items yet. Search for a part above, or add a custom line (e.g. labour, freight).</div>
       ) : (
         <div className="adm-table-wrap">
-          <table className="adm-lines">
+          <table className="adm-lines edit">
             <thead>
               <tr><th>Description</th><th style={{ width: 80 }}>Qty</th><th style={{ width: 140 }}>Unit price (incl. GST)</th><th className="num" style={{ width: 110 }}>Amount</th><th style={{ width: 44 }} /></tr>
             </thead>
@@ -233,14 +236,14 @@ export default function InvoiceEditor({
                         </div>
                       )}
                     </td>
-                    <td>
+                    <td data-label="Qty">
                       {l.partId !== null ? (
                         <span className="adm-muted" title="Each stock part is a single item">1</span>
                       ) : (
                         <input className="adm-input sm" aria-label="Quantity" type="number" min={1} step={1} value={l.quantity} onChange={e => updateLine(l.key, { quantity: e.target.value })} />
                       )}
                     </td>
-                    <td>
+                    <td data-label="Unit price (incl. GST)">
                       <input
                         className={`adm-input sm${bad && priceBad(l) ? ' invalid' : ''}`}
                         aria-label="Unit price including GST"
@@ -277,7 +280,6 @@ export default function InvoiceEditor({
         <span className="adm-note">Total {money(totals.total)} incl. {money(totals.gst)} GST</span>
       </div>
 
-      {/* ---------- part already on another unpaid invoice ---------- */}
       {conflicts && (
         <Modal
           title="Part already on another invoice"

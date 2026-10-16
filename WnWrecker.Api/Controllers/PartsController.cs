@@ -8,13 +8,12 @@ using WnWrecker.Api.Services;
 namespace WnWrecker.Api.Controllers
 {
     [ApiController]
-    [Route("api/[controller]")]              // base URL = /api/parts
+    [Route("api/[controller]")]
     public class PartsController : ControllerBase
     {
         private readonly AppDbContext _db;
         private readonly PhotoStorage _photos;
 
-        // the DbContext and photo storage are handed to us automatically (dependency injection)
         public PartsController(AppDbContext db, PhotoStorage photos)
         {
             _db = db;
@@ -24,14 +23,25 @@ namespace WnWrecker.Api.Controllers
         // GET /api/parts?search=&make=&model=&year=&inStock=true&sort=&page=&pageSize=   -> list (with optional search/filters)
         //   search   : every word must match the name, make, model, year or description (not case-sensitive)
         //   inStock  : true = only parts customers can buy (the shop, car finder and home page use this)
+        //   ids      : only these part ids, e.g. ids=3,14 (the cart uses this to re-check its parts)
         //   sort     : newest (default) | price-asc | price-desc
         //   pageSize : return one page at a time (max 60); the total number of matches is sent in the X-Total-Count header
         [EndpointSummary("List / search parts")]
         [HttpGet]
         public async Task<ActionResult<IEnumerable<Part>>> GetParts(string? search, string? make, string? model, int? year, bool? inStock,
-                                                                    string? sort, int? page, int? pageSize)
+                                                                    string? ids, string? sort, int? page, int? pageSize)
         {
             var query = _db.Parts.AsQueryable();
+
+            if (!string.IsNullOrWhiteSpace(ids))
+            {
+                var idList = ids.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                                .Select(x => int.TryParse(x, out var n) ? n : 0)
+                                .Where(n => n > 0)
+                                .Take(100)
+                                .ToList();
+                query = query.Where(p => idList.Contains(p.Id));
+            }
 
             if (inStock == true)
                 query = query.Where(p => p.Status == "In Stock");
@@ -87,7 +97,7 @@ namespace WnWrecker.Api.Controllers
         public async Task<ActionResult<Part>> GetPart(int id)
         {
             var part = await _db.Parts.FindAsync(id);
-            if (part == null) return NotFound();      // returns 404
+            if (part == null) return NotFound();
             return part;
         }
 
@@ -99,7 +109,7 @@ namespace WnWrecker.Api.Controllers
         {
             _db.Parts.Add(part);
             await _db.SaveChangesAsync();
-            return CreatedAtAction(nameof(GetPart), new { id = part.Id }, part);  // 201
+            return CreatedAtAction(nameof(GetPart), new { id = part.Id }, part);
         }
 
         // PUT /api/parts/5   -> update
@@ -122,7 +132,7 @@ namespace WnWrecker.Api.Controllers
             // PhotoUrl is NOT changed here — photos only change through the upload endpoint below
 
             await _db.SaveChangesAsync();
-            return NoContent();      // 204
+            return NoContent();
         }
 
         // DELETE /api/parts/5   -> delete
@@ -151,16 +161,15 @@ namespace WnWrecker.Api.Controllers
             if (part == null) return NotFound();
             if (file == null || file.Length == 0) return BadRequest("No file uploaded.");
 
-            //image allowed only
+            // images only
             var allowed = new[] { ".jpg", ".jpeg", ".png", ".webp", ".gif" };
             var ext = Path.GetExtension(file.FileName).ToLowerInvariant();
             if (!allowed.Contains(ext))
                 return BadRequest("Only image files (jpg, jpeg, png, webp, gif) are allowed.");
 
-            //image size upto 20mb
-            const long maxBytes = 20 * 1024 * 1024; // 20 MB
+            const long maxBytes = 8 * 1024 * 1024;   // same limit as the admin form (Cloudinary's free plan stops at 10 MB)
             if (file.Length > maxBytes)
-                return BadRequest("Image must be 20 MB or smaller.");
+                return BadRequest("Image must be 8 MB or smaller.");
 
             if (!_photos.IsConfigured)
                 return StatusCode(503, "Photo storage isn't set up yet (Cloudinary keys are missing).");

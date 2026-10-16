@@ -1,19 +1,20 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import type { Part } from '../../lib/types';
-import { API, authFetch, fmtDate, money, useToast } from '../../lib/admin';
+import { API, invoicePdfUrl } from '../../lib/api';
+import { authFetch, useToast } from '../../lib/admin';
+import { apiTime, fmtDate, fmtTime, isEmail, money, timeAgo } from '../../lib/format';
 import {
-  downloadAuthed, fetchInvoices, fetchParts, invoiceLink, isEmail, readError, toIso,
+  downloadAuthed, fetchInvoices, fetchParts, readError,
   type Invoice,
 } from '../../lib/invoices';
+import { useBusiness } from '../../lib/business';
+import { startPolling } from '../../lib/poll';
+import { usePageTitle } from '../../lib/usePageTitle';
 import { ConfirmDialog, Modal, Toast } from '../../components/AdminUI';
 import InvoiceEditor from '../../components/InvoiceEditor';
 import SharePanel from '../../components/SharePanel';
-import { useBusiness } from '../../lib/business';
-import { startPolling } from '../../lib/poll';
 import '../../styles/admin.css';
-import { usePageTitle } from '../../lib/usePageTitle';
 
-/* ================================ types ================================ */
 type ChatStatus = 'Needs reply' | 'Waiting on customer' | 'Closed';
 type ChatPart = { partId: number; name: string; vehicle: string; price: number; status: string };
 type ChatInvoice = { number: string; title: string | null; total: number; status: string; publicToken: string | null };
@@ -33,10 +34,9 @@ type ChatSummary = {
   lastMessageAt: string;
   messageCount: number;
   lastMessage: { text: string; sender: string } | null;
-  searchText?: string;
   parts: ChatPart[];
 };
-type ChatDetail = Omit<ChatSummary, 'messageCount' | 'lastMessage' | 'searchText'> & {
+type ChatDetail = Omit<ChatSummary, 'messageCount' | 'lastMessage'> & {
   handedOff: boolean;
   transcriptToken: string | null;
   messages: ChatMsg[];
@@ -46,30 +46,16 @@ type Tab = 'active' | 'closed';
 type Filter = 'all' | 'Needs reply' | 'Waiting on customer';
 type View = 'list' | 'product';
 
-/* ================================ helpers ================================ */
 const displayName = (c: { customerName: string | null; reference: string | null }) =>
   c.customerName?.trim() || `Guest ${c.reference ?? ''}`.trim();
 
-function timeAgo(iso: string) {
-  const d = new Date(toIso(iso));
-  const mins = Math.floor((Date.now() - d.getTime()) / 60000);
-  if (mins < 1) return 'just now';
-  if (mins < 60) return `${mins}m ago`;
-  const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return `${hrs}h ago`;
-  if (hrs < 48) return 'yesterday';
-  return d.toLocaleDateString('en-AU', { day: 'numeric', month: 'short' });
-}
-
-const timeOnly = (iso: string) => new Date(toIso(iso)).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
-
-const STATUS_CLASS: Record<ChatStatus, string> = {
-  'Needs reply': 'needs',
-  'Waiting on customer': 'waiting',
+const CHAT_BADGE: Record<ChatStatus, string> = {
+  'Needs reply': 'chat-needs',
+  'Waiting on customer': 'chat-waiting',
   Closed: 'void',
 };
 function ChatBadge({ status }: { status: ChatStatus }) {
-  return <span className={`adm-badge chat-${STATUS_CLASS[status] ?? 'void'}`}>{status}</span>;
+  return <span className={`adm-badge ${CHAT_BADGE[status] ?? 'void'}`}>{status}</span>;
 }
 
 const partBadge = (status: string) => {
@@ -82,7 +68,6 @@ const partBadge = (status: string) => {
 // tell the admin nav to refresh its "needs reply" badge
 const pingNav = () => window.dispatchEvent(new Event('wn-chats-changed'));
 
-/* ================================ page ================================ */
 export default function ChatManagement() {
   usePageTitle('Admin · Chats');
   const { toast, notify } = useToast();
@@ -90,8 +75,10 @@ export default function ChatManagement() {
   const [chats, setChats] = useState<ChatSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<Tab>('active');
-  const [filter, setFilter] = useState<Filter>('all');
+  // ?filter=needs (from the dashboard) starts on the chats that need a reply
+  const [filter, setFilter] = useState<Filter>(() => (new URLSearchParams(window.location.search).get('filter') === 'needs' ? 'Needs reply' : 'all'));
   const [query, setQuery] = useState('');
+  const [messageMatches, setMessageMatches] = useState<{ term: string; ids: Set<number> }>({ term: '', ids: new Set() });
   const [view, setView] = useState<View>('list');
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
 
@@ -101,8 +88,8 @@ export default function ChatManagement() {
   const [reply, setReply] = useState('');
   const [sending, setSending] = useState(false);
   const messagesRef = useRef<HTMLDivElement>(null);
+  const detailRef = useRef<HTMLDivElement>(null);
 
-  // popups
   const [confirmClose, setConfirmClose] = useState(false);
   const [busy, setBusy] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
@@ -112,15 +99,15 @@ export default function ChatManagement() {
   const [pickedInvoice, setPickedInvoice] = useState<number | null>(null);
   const [invoiceQuery, setInvoiceQuery] = useState('');
 
-  /* ---------- loading (polls so new messages show up on their own) ---------- */
+  // Loading (polls so new messages show up on their own)
   const loadList = useCallback(async () => {
     try {
-      const res = await authFetch(`${API}/api/admin/chats`);
+      const res = await authFetch(`${API}/api/admin/chats`, { signal: AbortSignal.timeout(45000) });   // allow a slow first load
       if (res.ok) setChats(await res.json());
     } catch { /* keep the last list if a poll fails */ }
   }, []);
 
-  // chat list: refresh every 8s (never overlapping, paused while the tab is hidden)
+  // refresh the chat list every 8s
   useEffect(() => {
     let alive = true;
     const stop = startPolling(async () => { await loadList(); if (alive) setLoading(false); }, 8000);
@@ -137,7 +124,7 @@ export default function ChatManagement() {
   useEffect(() => {
     if (selectedId == null) return;
     let alive = true;
-    // open conversation: refresh every 4s (never overlapping, paused while the tab is hidden)
+    // refresh the open conversation every 4s
     const stop = startPolling(() =>
       authFetch(`${API}/api/admin/chats/${selectedId}`)
         .then(r => (r.ok ? r.json() : null))
@@ -146,6 +133,15 @@ export default function ChatManagement() {
   }, [selectedId]);
 
   const current = detail && detail.id === selectedId ? detail : null;
+
+  // on phones the conversation replaces the list once it has loaded, so bring it into view
+  const scrollOnOpen = useRef(false);
+  const currentId = current?.id;
+  useEffect(() => {
+    if (currentId == null || !scrollOnOpen.current) return;
+    scrollOnOpen.current = false;
+    if (window.matchMedia('(max-width: 860px)').matches) detailRef.current?.scrollIntoView({ block: 'start' });
+  }, [currentId]);
 
   // keep the newest message in view
   const msgCount = current?.messages.length ?? 0;
@@ -159,7 +155,21 @@ export default function ChatManagement() {
     pingNav();
   };
 
-  /* ---------- derived ---------- */
+  // search inside older messages on the server (debounced), so the list itself stays light
+  const term = query.trim().toLowerCase();
+  useEffect(() => {
+    if (term.length < 2) return;
+    let alive = true;
+    const timer = window.setTimeout(() => {
+      authFetch(`${API}/api/admin/chats/search?q=${encodeURIComponent(term)}`)
+        .then(r => (r.ok ? r.json() : []))
+        .then((ids: number[]) => { if (alive) setMessageMatches({ term, ids: new Set(ids) }); })
+        .catch(() => { /* the list search still works without it */ });
+    }, 300);
+    return () => { alive = false; window.clearTimeout(timer); };
+  }, [term]);
+
+  // Derived
   const counts = useMemo(() => {
     const active = chats.filter(c => !c.closed);
     return {
@@ -171,18 +181,18 @@ export default function ChatManagement() {
   }, [chats]);
 
   const visible = useMemo(() => {
-    const term = query.trim().toLowerCase();
+    const inMessages = messageMatches.term === term ? messageMatches.ids : null;
     return chats
       .filter(c => (tab === 'closed' ? c.closed : !c.closed))
       .filter(c => tab === 'closed' || filter === 'all' || c.status === filter)
       .filter(c => {
         if (!term) return true;
-        const hay = `${c.customerName ?? ''} ${c.customerContact ?? ''} ${c.reference ?? ''} ${c.lastMessage?.text ?? ''} ${c.searchText ?? ''} ${c.parts.map(p => `${p.name} ${p.vehicle}`).join(' ')}`;
-        return hay.toLowerCase().includes(term);
+        const hay = `${c.customerName ?? ''} ${c.customerContact ?? ''} ${c.reference ?? ''} ${c.lastMessage?.text ?? ''} ${c.parts.map(p => `${p.name} ${p.vehicle}`).join(' ')}`;
+        return hay.toLowerCase().includes(term) || !!inMessages?.has(c.id);
       })
-      // needs-reply chats float to the top, then newest activity first
-      .sort((a, b) => Number(b.needsReply) - Number(a.needsReply) || toIso(b.lastMessageAt).localeCompare(toIso(a.lastMessageAt)));
-  }, [chats, tab, filter, query]);
+      // chats that need a reply first, then newest activity
+      .sort((a, b) => Number(b.needsReply) - Number(a.needsReply) || apiTime(b.lastMessageAt) - apiTime(a.lastMessageAt));
+  }, [chats, tab, filter, term, messageMatches]);
 
   // "By product": active chats grouped under each part they asked about (a chat can appear under several parts)
   const groups = useMemo(() => {
@@ -195,12 +205,12 @@ export default function ChatManagement() {
         map.get(key)!.chats.push(c);
       }
     }
-    const latest = (g: { chats: ChatSummary[] }) => g.chats.reduce((m, c) => (toIso(c.lastMessageAt) > m ? toIso(c.lastMessageAt) : m), '');
+    const latest = (g: { chats: ChatSummary[] }) => Math.max(...g.chats.map(c => apiTime(c.lastMessageAt)));
     const needs = (g: { chats: ChatSummary[] }) => g.chats.filter(c => c.needsReply).length;
     return [...map.values()].sort((a, b) =>
       Number(a.key === 'none') - Number(b.key === 'none') ||
       Number(needs(b) > 0) - Number(needs(a) > 0) ||
-      latest(b).localeCompare(latest(a)));
+      latest(b) - latest(a));
   }, [visible]);
 
   const toggleGroup = (key: string) => setCollapsed(prev => {
@@ -209,8 +219,12 @@ export default function ChatManagement() {
     return next;
   });
 
-  /* ---------- actions ---------- */
-  const select = (id: number) => { setSelectedId(id); setReply(''); };
+  // Actions
+  const select = (id: number) => {
+    setSelectedId(id);
+    setReply('');
+    scrollOnOpen.current = true;
+  };
 
   const sendReply = async () => {
     if (!current || !reply.trim()) return;
@@ -251,7 +265,7 @@ export default function ChatManagement() {
     }
   };
 
-  /* ---------- send invoice ---------- */
+  // Send invoice
   const openInvoicePopup = async () => {
     setInvoiceOpen(true);
     setInvoiceMode('existing');
@@ -300,7 +314,6 @@ export default function ChatManagement() {
 
   const transcriptLink = current?.transcriptToken ? `${API}/api/chat/transcript/${current.transcriptToken}/pdf` : '';
 
-  /* ================================ render ================================ */
   return (
     <div className="adm">
       <header className="adm-header">
@@ -321,7 +334,7 @@ export default function ChatManagement() {
       </nav>
 
       {tab === 'active' && (
-        <section className="adm-stats" aria-label="Chat summary">
+        <section className={`adm-stats chat-stats${loading ? ' loading' : ''}`} aria-label="Chat summary" aria-busy={loading}>
           <button type="button" className={`adm-stat adm-stat-btn alert${filter === 'Needs reply' ? ' on' : ''}`} onClick={() => setFilter(f => (f === 'Needs reply' ? 'all' : 'Needs reply'))}>
             <span>Needs reply</span><strong>{counts.needs}</strong><small>customers waiting on you</small>
           </button>
@@ -335,7 +348,6 @@ export default function ChatManagement() {
       )}
 
       <section className={`adm-panel adm-chat${current ? ' show-detail' : ''}`}>
-        {/* ---------------- LIST ---------------- */}
         <aside className="adm-chat-list">
           <div className="adm-chat-search">
             <input className="adm-input" aria-label="Search chats" placeholder="Search name, reference, part, message…" value={query} onChange={e => setQuery(e.target.value)} />
@@ -429,8 +441,7 @@ export default function ChatManagement() {
           </div>
         </aside>
 
-        {/* ---------------- CONVERSATION ---------------- */}
-        <div className="adm-chat-detail">
+        <div className="adm-chat-detail" ref={detailRef}>
           {!current ? (
             <div className="adm-empty adm-chat-placeholder">
               <strong>{selectedId ? 'Loading…' : 'Select a chat'}</strong>
@@ -476,7 +487,7 @@ export default function ChatManagement() {
                 {current.messages.length === 0 && <p className="adm-muted" style={{ textAlign: 'center' }}>No messages yet.</p>}
                 {current.messages.map(m => {
                   if (m.sender === 'system') {
-                    return <div key={m.id} className="adm-msg-system">{m.text} · {timeOnly(m.sentAt)}</div>;
+                    return <div key={m.id} className="adm-msg-system">{m.text} · {fmtTime(m.sentAt)}</div>;
                   }
                   const mine = m.sender === 'admin';
                   return (
@@ -489,12 +500,12 @@ export default function ChatManagement() {
                             {m.invoice.title && <span>{m.invoice.title}</span>}
                             <span>{money(Number(m.invoice.total))} incl. GST · {m.invoice.status}</span>
                           </div>
-                          <a className="adm-btn sm" href={invoiceLink(m.invoice.publicToken)} target="_blank" rel="noreferrer">Open</a>
+                          <a className="adm-btn sm" href={invoicePdfUrl(m.invoice.publicToken)} target="_blank" rel="noreferrer">Open</a>
                         </div>
                       ) : (
                         <div className="adm-msg-bubble">{m.text}</div>
                       )}
-                      <div className="adm-msg-time">{timeOnly(m.sentAt)}</div>
+                      <div className="adm-msg-time">{fmtTime(m.sentAt)}</div>
                     </div>
                   );
                 })}
@@ -529,7 +540,6 @@ export default function ChatManagement() {
         </div>
       </section>
 
-      {/* ---------------- CLOSE CONFIRMATION ---------------- */}
       {confirmClose && current && (
         <ConfirmDialog
           danger
@@ -542,7 +552,6 @@ export default function ChatManagement() {
         />
       )}
 
-      {/* ---------------- TRANSCRIPT SHARE ---------------- */}
       {shareOpen && current && (
         <Modal
           wide
@@ -565,7 +574,6 @@ export default function ChatManagement() {
         </Modal>
       )}
 
-      {/* ---------------- SEND INVOICE ---------------- */}
       {invoiceOpen && current && (
         <Modal
           wide

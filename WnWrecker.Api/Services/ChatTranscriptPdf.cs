@@ -86,7 +86,7 @@ namespace WnWrecker.Api.Services
                             }
 
                             var text = m.Kind == "invoice" && m.Invoice != null
-                                ? $"Sent invoice {m.Invoice.Number} — ${m.Invoice.Total:N2} (incl. GST)"
+                                ? $"Sent invoice {m.Invoice.Number} — {ChatInfo.Money(m.Invoice.Total)} (incl. GST)"
                                 : m.Text;
 
                             col.Item().PaddingTop(8).Column(msg =>
